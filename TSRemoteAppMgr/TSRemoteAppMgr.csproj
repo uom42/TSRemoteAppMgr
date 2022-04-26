@@ -1,0 +1,64 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net6.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<UseWindowsForms>true</UseWindowsForms>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+		<Product>TS RemoteApp Manager</Product>
+		<Description>TS RemoteApp Manager</Description>
+		<Authors>UOM</Authors>
+
+		<ApplicationVisualStyles>true</ApplicationVisualStyles>
+		<ApplicationUseCompatibleTextRendering>false</ApplicationUseCompatibleTextRendering>
+		<ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<Compile Remove="Media\**" />
+		<EmbeddedResource Remove="Media\**" />
+		<None Remove="Media\**" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Include="..\..\..\_LIB\CS_UOM\Network\uom.WinAPI.Network.cs" Link="Libs\uom.WinAPI.Network.cs" />
+		<Compile Include="..\..\..\_LIB\CS_UOM\Network\uom.WinAPI.Network.TerminalServer.RemoteApp.cs" Link="Libs\uom.WinAPI.Network.TerminalServer.RemoteApp.cs" />
+		<Compile Include="..\..\..\_LIB\CS_UOM\uom.Multiplatform.Core.cs" Link="Libs\uom.Multiplatform.Core.cs" />
+		<Compile Include="..\..\..\_LIB\CS_UOM\uom.Win.Core.cs" Link="Libs\uom.Win.Core.cs" />
+		<Compile Include="..\..\..\_LIB\CS_UOM\_Controls\common.Controls.ListViewEx.cs" Link="Libs\common.Controls.ListViewEx.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="Media\Disk.png" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Update="Properties\Resources.Designer.cs">
+			<DesignTime>True</DesignTime>
+			<AutoGen>True</AutoGen>
+			<DependentUpon>Resources.resx</DependentUpon>
+		</Compile>
+		<Compile Update="Properties\Settings.Designer.cs">
+			<DesignTimeSharedInput>True</DesignTimeSharedInput>
+			<AutoGen>True</AutoGen>
+			<DependentUpon>Settings.settings</DependentUpon>
+		</Compile>
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Update="Properties\Settings.settings">
+			<Generator>SettingsSingleFileGenerator</Generator>
+			<LastGenOutput>Settings.Designer.cs</LastGenOutput>
+		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Update="Properties\Resources.resx">
+			<Generator>ResXFileCodeGenerator</Generator>
+			<LastGenOutput>Resources.Designer.cs</LastGenOutput>
+		</EmbeddedResource>
+	</ItemGroup>
+
+</Project>
