@@ -5,8 +5,6 @@ VisualStudioVersion = 17.1.32228.430
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TSRemoteAppMgr", "TSRemoteAppMgr\TSRemoteAppMgr.csproj", "{8F54D84C-30D9-4746-96A9-ABCF8C26C557}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Media", "Media", "{2D8AA1E5-7131-4819-B0DE-FE1A90AFDB6D}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

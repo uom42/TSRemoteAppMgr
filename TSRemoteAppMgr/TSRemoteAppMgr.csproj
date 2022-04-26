@@ -23,11 +23,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<Compile Include="..\..\..\_LIB\CS_UOM\Network\uom.WinAPI.Network.cs" Link="Libs\uom.WinAPI.Network.cs" />
-		<Compile Include="..\..\..\_LIB\CS_UOM\Network\uom.WinAPI.Network.TerminalServer.RemoteApp.cs" Link="Libs\uom.WinAPI.Network.TerminalServer.RemoteApp.cs" />
-		<Compile Include="..\..\..\_LIB\CS_UOM\uom.Multiplatform.Core.cs" Link="Libs\uom.Multiplatform.Core.cs" />
-		<Compile Include="..\..\..\_LIB\CS_UOM\uom.Win.Core.cs" Link="Libs\uom.Win.Core.cs" />
-		<Compile Include="..\..\..\_LIB\CS_UOM\_Controls\common.Controls.ListViewEx.cs" Link="Libs\common.Controls.ListViewEx.cs" />
+
 	</ItemGroup>
 
 	<ItemGroup>
