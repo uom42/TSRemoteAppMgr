@@ -18,7 +18,7 @@
 			catch (ObjectDisposedException) { }
 			catch (Exception ex)
 			{
-				MessageBox.Show(ex.Message.ToString(), "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+				MessageBox.Show(ex.Message.ToString(), "Something went wrong!", MessageBoxButtons.OK, MessageBoxIcon.Error);
 			}
 		}
 	}

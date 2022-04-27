@@ -1,12 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
+﻿using System.Data;
 
 using TSRemoteAppMgr.Properties;
 
@@ -18,16 +10,24 @@ using static uom.WinAPI.Network.TerminalServer;
 
 namespace TSRemoteAppMgr
 {
-	public partial class frmLogin : Form
+	public partial class frmLogin : common.Controls.FormEx
 	{
 
 		private const string CS_USE_EMPTY_FIELDS = "Leave this field blank to use the default credentials";
-
 
 		private bool _localTSInstalled = false;
 
 		internal static RemoteAppsList? ConnectToServer()
 		{
+
+			if (uom.Net.IsInDomain())
+			{
+				//throw new NotSupportedException("This tool is for network infrastructure in non-domain workgroups.");
+				MessageBox.Show(
+					 "This tool is for network infrastructure in non-domain workgroups.",
+					"This PC is in domain!", MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
+			}
+
 			RemoteAppsList? result = null;
 
 			using (frmLogin fl = new())
