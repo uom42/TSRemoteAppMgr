@@ -9,11 +9,13 @@ You can connect to local or remote Terminal Server using startup dialog.
 The standard Windows Networking (WNet) mechanism is used to access a remote server.
 Therefore, you need the appropriate permissions, just like accessing the \\\host\C$ drive of a remote system.
 
-Due to this mechanism limitations, if you already have access to a remote server with some lower level credentials, you will not be able to connect to the server with such conditions, because. WNet does not allow multiple connections to a server with different credentials.
+Due to this mechanism limitations, if you already have access to a remote server with some lower level credentials, you will not be able to connect to the server with such conditions, because WNet does not allow multiple connections to a server with different credentials.
 You will need to delete the first connection to the server in the credential manager and possibly reboot or do a user logoff.
 The remote registry service must be active on the remote server. All data about applications and server settings are read from the registry.
 
 Or, as a fallback, you can configure this application directly on the server as RemoteApp in the standard way, and connect to it via RDP-file.
+
+When connecting locally to the server, you need permissions to the 'HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Terminal Server\' registry key and its subkeys.
 
 ## Main application screen
 After Login dialog, you will see Main application screen.

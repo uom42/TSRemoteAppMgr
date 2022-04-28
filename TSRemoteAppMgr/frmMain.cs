@@ -212,13 +212,16 @@ namespace TSRemoteAppMgr
 			this.tryOnWaitCursor(() =>
 			{
 				ServerSettings ss = _ral!.LoadServerSettings();
-				ss.MarkAsReadonly(true);
+				ss.AllowAnyProgramms = true;
+
 				try
 				{
 					if (!Helpers.frmRDPFileParams.EditObject(ss, $"Server Settings")) return;
 				}
-				finally { ss.MarkAsReadonly(false); }
-
+				finally
+				{
+					ss.SetPropertyGridFields(true, false);//Restore class fields browsable and readonly to defaults
+				}
 				_ral!.SaveServerSettings(ss);
 			});
 		}
