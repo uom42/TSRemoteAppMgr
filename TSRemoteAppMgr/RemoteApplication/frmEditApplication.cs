@@ -32,6 +32,7 @@ namespace TSRemoteAppMgr.RemoteApplication
 		public frmEditApplication()
 		{
 			InitializeComponent();
+			_appList = null;
 		}
 
 		internal frmEditApplication(RemoteAppsList rAppList, RemoteApp? app, Func<string[]> getListViewGroups) : this()
