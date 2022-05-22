@@ -6,6 +6,7 @@ using static uom.WinAPI.Network.TerminalServer;
 using Microsoft.VisualBasic;
 using System.ComponentModel;
 using System.Reflection;
+using System.Diagnostics;
 
 #nullable enable
 
@@ -19,7 +20,6 @@ namespace TSRemoteAppMgr
 		public frmMain() : base()
 		{
 			_ral = frmLogin.ConnectToServer();
-
 			if (null == _ral)
 			{
 				this.Close();
@@ -51,6 +51,14 @@ namespace TSRemoteAppMgr
 			lvwAppList.Items_NeedInsert += (s, e) => { OnRow_Add(); };
 
 			lvwAppList.Items_NeedRefreshList += (s, e) => { FillList(); };
+
+
+
+
+
+
+
+
 		}
 
 		private void FillList()
@@ -212,8 +220,6 @@ namespace TSRemoteAppMgr
 			this.tryOnWaitCursor(() =>
 			{
 				ServerSettings ss = _ral!.LoadServerSettings();
-				ss.AllowAnyProgramms = true;
-
 				try
 				{
 					if (!Helpers.frmRDPFileParams.EditObject(ss, $"Server Settings")) return;
@@ -250,6 +256,13 @@ namespace TSRemoteAppMgr
 					if (dr != DialogResult.OK) return;
 
 					_ral.ExportToFile(ofd.FileName);
+
+
+
+					string ggg = "asd";
+					var yyy = ggg.e_AllIndexesOf("asd");
+
+
 				}
 			});
 		}

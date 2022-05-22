@@ -25,14 +25,14 @@ namespace TSRemoteAppMgr.RemoteApplication
 		private const string C_ARG_FLG_ANY = "!Unsafe! Allow any arguments from rdp-file";
 
 
-		private RemoteAppsList _appList;
+		private readonly RemoteAppsList? _appList = null;
 		internal RemoteApp? _app = null;
-		private Func<string[]> _getListViewGroups;
+		private readonly Func<string[]>? _getListViewGroups = null;
 
 		public frmEditApplication()
 		{
 			InitializeComponent();
-			_appList = null;
+			//_appList = null;
 		}
 
 		internal frmEditApplication(RemoteAppsList rAppList, RemoteApp? app, Func<string[]> getListViewGroups) : this()
@@ -53,7 +53,7 @@ namespace TSRemoteAppMgr.RemoteApplication
 			uom.ComboboxItemContainer<RemoteApp.CLS_FLAGS> argFlg = (a.Where(f => f.Value == RemoteApp.CLS_FLAGS.DISABLED).First());
 
 			cboListGroup.Items.Clear();
-			cboListGroup.Items.AddRange(_getListViewGroups.Invoke());
+			cboListGroup.Items.AddRange(_getListViewGroups!.Invoke());
 
 			btnCreateRDPfile.Visible = (null != _app);
 
@@ -213,7 +213,7 @@ namespace TSRemoteAppMgr.RemoteApplication
 					(null != exErr)
 					&& (txt == txtPath)
 					&& (_appList!.IsRemote)
-					&& (exErr.GetType() == typeof(FileNotFoundException))
+					&& (exErr is FileNotFoundException exfnf)
 					)
 				{
 					exErr = null;//Just allow to save data even if the remote path is not correct!
@@ -267,27 +267,20 @@ namespace TSRemoteAppMgr.RemoteApplication
 				_appList!.CheckRemoteServerValid();
 
 				RDPFileSettings p = _app.CreateRDPParams();
+				using var ofd = new SaveFileDialog();
+				ofd.AutoUpgradeEnabled = true;
+				ofd.CheckPathExists = true;
+				ofd.DereferenceLinks = true;
+				ofd.AddExtension = true;
+				ofd.DefaultExt = ".rdp";
+				ofd.Filter = "RDP-file|*.rdp";
 
-				using (var ofd = new SaveFileDialog())
-				{
-					ofd.AutoUpgradeEnabled = true;
-					ofd.CheckPathExists = true;
-					ofd.DereferenceLinks = true;
-					ofd.AddExtension = true;
-					ofd.DefaultExt = ".rdp";
-					ofd.Filter = "RDP-file|*.rdp";
+				if (!Helpers.frmRDPFileParams.EditObject(p, $"Create RDP file for '{_app.Alias}'")) return;
 
-					if (!Helpers.frmRDPFileParams.EditObject(p, $"Create RDP file for '{_app.Alias}'")) return;
-					{
-						ofd.FileName = _app.Alias;
-						var dr = ofd.ShowDialog();
-						if (dr == DialogResult.OK)
-						{
-							p.WriteFile(ofd.FileName);
-						}
-					}
+				ofd.FileName = _app.Alias;
+				var dr = ofd.ShowDialog();
+				if (dr == DialogResult.OK) p.WriteFile(ofd.FileName);
 
-				}
 			});
 		}
 	}
