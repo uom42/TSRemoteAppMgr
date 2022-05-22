@@ -83,16 +83,16 @@ namespace TSRemoteAppMgr.RemoteApplication
 
 
 
-			this.txtAlias.TextChanged += (s, e) => { ValidateTextFields(); };
-			this.txtTitle.TextChanged += (s, e) => { ValidateTextFields(); };
-			this.txtPath.TextChanged += (s, e) => { ValidateTextFields(); };
+			txtAlias.TextChanged += (s, e) => { ValidateTextFields(); };
+			txtTitle.TextChanged += (s, e) => { ValidateTextFields(); };
+			txtPath.TextChanged += (s, e) => { ValidateTextFields(); };
 
 			ValidateTextFields();
 		}
 
 		private void btnPathSelect_Click(object sender, EventArgs e)
 		{
-			this.Cursor = Cursors.WaitCursor;
+			Cursor = Cursors.WaitCursor;
 			try
 			{
 				string remoteFilePath = string.Empty;
@@ -165,7 +165,7 @@ namespace TSRemoteAppMgr.RemoteApplication
 			}
 			finally
 			{
-				this.Cursor = Cursors.Default;
+				Cursor = Cursors.Default;
 			}
 		}
 
@@ -213,7 +213,7 @@ namespace TSRemoteAppMgr.RemoteApplication
 					(null != exErr)
 					&& (txt == txtPath)
 					&& (_appList!.IsRemote)
-					&& (exErr is FileNotFoundException exfnf)
+					&& (exErr is FileNotFoundException)
 					)
 				{
 					exErr = null;//Just allow to save data even if the remote path is not correct!

@@ -1,12 +1,10 @@
-﻿using TSRemoteAppMgr.RemoteApplication;
+﻿using Microsoft.VisualBasic;
+
+using TSRemoteAppMgr.RemoteApplication;
 
 using uom.Extensions;
 
 using static uom.WinAPI.Network.TerminalServer;
-using Microsoft.VisualBasic;
-using System.ComponentModel;
-using System.Reflection;
-using System.Diagnostics;
 
 #nullable enable
 
@@ -22,7 +20,7 @@ namespace TSRemoteAppMgr
 			_ral = frmLogin.ConnectToServer();
 			if (null == _ral)
 			{
-				this.Close();
+				Close();
 				Application.Exit();
 				return;
 			}
@@ -36,7 +34,7 @@ namespace TSRemoteAppMgr
 			if (_ral!.IsRemote) btnServer_Export.ToolTipText = "Export allowed only on local connection!";
 
 
-			this.Load += (s, e) => { FillList(); };
+			Load += (s, e) => { FillList(); };
 
 
 			lvwAppList.SelectedIndexChanged += (s, e) => { OnRow_Selected(); };
