@@ -17,6 +17,8 @@ using Microsoft.Win32.SafeHandles;
 using uom.Extensions;
 using System;
 
+using hwnd = System.IntPtr;
+
 #nullable enable
 
 #if NET5_0_OR_GREATER || NET6_0_OR_GREATER || NETCOREAPP3_0_OR_GREATER
@@ -174,7 +176,7 @@ namespace uom
 			Encoding? StandardOutputEncoding = null,
 			ConsoleAppErrorMode cem = ConsoleAppErrorMode.ErrorMustThrowException)
 		{
-			Debug.WriteLine("*** Exec '" + sExe + "' with args: '" + sArguments + "'");
+			Debug.WriteLine("*** e_run '" + sExe + "' with args: '" + sArguments + "'");
 			FileInfo fiExe = new(sExe);
 			var PSI = new ProcessStartInfo
 			{
@@ -798,7 +800,7 @@ namespace uom
 					fileClass = @"SystemFileAssociations\" + fileExtensionWithDot;
 
 					#region То работает то нет
-					// Dim sW10SystemFileAssociationsClass = ExecOn_TryCatch_Func(Of String)(Function()
+					// Dim sW10SystemFileAssociationsClass = e_runOn_TryCatch_Func(Of String)(Function()
 					// Using hkeySystemFileAssociations = Global.Microsoft.WinAPI.Registry.ClassesRoot.OpenSubKey()
 					// Return CStr(hkeyFileExtension.GetValue("", vbNullString, Microsoft.WinAPI.RegistryValueOptions.DoNotExpandEnvironmentNames))
 					// End Using
@@ -3005,12 +3007,116 @@ namespace uom
 		internal static partial class Extensions_Async_MT
 		{
 
+
+
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static void e_RunOnDisabled(this Control ctl, Action a)
+			{
+				_ = a ?? throw new ArgumentNullException(nameof(a));
+
+				bool oldEnabledStatus = ctl.Enabled;
+				ctl.Enabled = false;
+				try
+				{
+					a.Invoke();
+				}
+				finally
+				{
+					if (oldEnabledStatus) ctl.Enabled = true;
+				}
+			}
+
+
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static void e_RunOnDisabled(this IEnumerable<Control> actls, Action a)
+			{
+				_ = a ?? throw new ArgumentNullException(nameof(a));
+
+				var L = actls.Select(ctl => new { Ctl = ctl, EnabledStatus = ctl.Enabled }).ToList();
+
+				L.ForEach(ctl => ctl.Ctl.Enabled = false);
+				try
+				{
+					a.Invoke();
+				}
+				finally
+				{
+					L.ForEach(ctl => ctl.Ctl.Enabled = ctl.EnabledStatus);
+				}
+			}
+
+
+
+
+			/*
+			 
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static async Task e_RunOnDisabledAsync(this IEnumerable<Control>? actls, Task a)
+			{
+				var L = actls?.Select(ctl => new { Ctl = ctl, EnabledStatus = ctl.Enabled }).ToList();
+				L?.ForEach(ctl => ctl.Ctl.Enabled = false);
+				try
+				{
+					await a;
+				}
+				finally
+				{
+					L?.ForEach(ctl => ctl.Ctl.Enabled = ctl.EnabledStatus);
+				}
+			}
+			*/
+
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static async Task e_RunOnDisabledAsync(
+				this IEnumerable<Control>? actls,
+				Func<Task> a,
+				Form? waitCursorForm = null)
+			{
+				_ = a ?? throw new ArgumentNullException(nameof(a));
+
+				if (null != waitCursorForm) waitCursorForm!.UseWaitCursor = true;
+				var L = actls?.Select(ctl => new { Ctl = ctl, OldEnabledStatus = ctl.Enabled }).ToList();
+
+				try
+				{
+					L?.ForEach(ctl =>
+					{
+						ctl.Ctl.Enabled = false;
+						ctl.Ctl.Update();
+					});
+
+					await a.Invoke();
+				}
+				finally
+				{
+					L?.ForEach(ctl =>
+					{
+						if (ctl.OldEnabledStatus) ctl.Ctl.Enabled = true;
+					});
+
+					if (null != waitCursorForm) waitCursorForm!.UseWaitCursor = false;
+				}
+
+			}
+
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static async Task e_RunOnDisabledAsync(
+				this Control ctl,
+				Func<Task> a,
+				Form? waitCursorForm = null)
+				=> await ctl.e_ToArrayOf().e_RunOnDisabledAsync(a, waitCursorForm);
+
+
+
+
+
+
 			/// <summary>
 			/// Usually used when you need to do an action with a slight delay after exiting the current method. 
 			/// For example, if some data will be ready only after exiting the control event handler processing branch
 			/// </summary>
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void RunDelayed(this Action DelayedAction, int DelayInterval = 100)
+			public static void e_RunDelay(this Action DelayedAction, int DelayInterval = 100)
 			{
 				_ = DelayedAction ?? throw new ArgumentNullException(nameof(DelayedAction));
 
@@ -3022,7 +3128,7 @@ namespace uom
 				};
 				tmrDelay.Tick += (s, te) =>
 				{
-					//first stop and dispose our timer, to avoid double execution
+					//first stop and dispose our timer, to avoid double e_runution
 					tmrDelay.Stop();
 					tmrDelay.Dispose();
 
@@ -3034,6 +3140,144 @@ namespace uom
 				tmrDelay.Start();
 			}
 
+
+
+
+			/// <summary>
+			/// e_runute's an async Task<T> method which has a void return value synchronously
+			/// </summary>
+			/// <param name="task">Task<T> method to e_runute</param>
+			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static void e_RunSync(this Func<Task> task)
+			{
+				var oldContext = SynchronizationContext.Current;
+				ExclusiveSynchronizationContext synch = new();
+				SynchronizationContext.SetSynchronizationContext(synch);
+				synch.Post(async _ =>
+				{
+					try
+					{
+						await task();
+					}
+					catch (Exception e)
+					{
+						synch.InnerException = e;
+						throw;
+					}
+					finally
+					{
+						synch.EndMessageLoop();
+					}
+				}, null);
+				synch.BeginMessageLoop();
+
+				SynchronizationContext.SetSynchronizationContext(oldContext);
+			}
+
+			/// <summary>
+			/// e_runute's an async Task<T> method which has a T return type synchronously
+			/// </summary>
+			/// <typeparam name="T">Return Type</typeparam>
+			/// <param name="task">Task<T> method to e_runute</param>
+			/// <returns></returns>
+			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static T? e_RunSync<T>(this Func<Task<T?>> task)
+			{
+				var oldContext = SynchronizationContext.Current;
+				var synch = new ExclusiveSynchronizationContext();
+				SynchronizationContext.SetSynchronizationContext(synch);
+				T? ret = default(T);
+				synch.Post(async _ =>
+				{
+					try
+					{
+						ret = await task.Invoke();
+					}
+					catch (Exception e)
+					{
+						synch.InnerException = e;
+						throw;
+					}
+					finally
+					{
+						synch.EndMessageLoop();
+					}
+				}, null);
+				synch.BeginMessageLoop();
+				SynchronizationContext.SetSynchronizationContext(oldContext);
+				return ret;
+			}
+
+			/// <summary>
+			/// e_runute's an async Task<T> method which has a T return type synchronously
+			/// </summary>
+			/// <typeparam name="T">Return Type</typeparam>
+			/// <param name="task">Task<T> method to e_runute</param>
+			/// <returns></returns>
+			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static T? e_RunSync<T>(this Task<T> task)
+			{
+				var ret = e_RunSync(() => task!);
+				return ret;
+			}
+
+			private class ExclusiveSynchronizationContext : SynchronizationContext
+			{
+				private bool done;
+				public Exception? InnerException { get; set; }
+				readonly AutoResetEvent workItemsWaiting = new AutoResetEvent(false);
+				readonly Queue<Tuple<SendOrPostCallback, object?>> items =
+					new Queue<Tuple<SendOrPostCallback, object?>>();
+
+				public override void Send(SendOrPostCallback d, object? state)
+				{
+					throw new NotSupportedException("We cannot send to our same thread");
+				}
+
+				public override void Post(SendOrPostCallback d, object? state)
+				{
+					lock (items)
+					{
+						items.Enqueue(Tuple.Create(d, state));
+					}
+					workItemsWaiting.Set();
+				}
+
+				public void EndMessageLoop() => Post(_ => done = true, null);
+
+				public void BeginMessageLoop()
+				{
+					while (!done)
+					{
+						Tuple<SendOrPostCallback, object?>? task = null;
+						lock (items)
+						{
+							if (items.Count > 0)
+							{
+								task = items.Dequeue();
+							}
+						}
+						if (task != null)
+						{
+							task.Item1(task.Item2);
+							if (InnerException != null) // the method threw an exeption
+							{
+								//throw new AggregateException("AsyncHelpers.Run method threw an exception.", InnerException);
+								throw InnerException;
+							}
+						}
+						else
+						{
+							workItemsWaiting.WaitOne();
+						}
+					}
+				}
+
+				public override SynchronizationContext CreateCopy()
+				{
+					return this;
+				}
+			}
 		}
 
 
@@ -3128,22 +3372,15 @@ namespace uom
 			#endregion
 
 
-			#region runDelayed / ExecDelay
+			#region runDelayed 
 
 			internal const int C_AWAIT_DELAY_AFTER_UI_SHOWN = 500;
 
-			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void ExecDelay_SetFocus(this Form F, int DelayMS = C_AWAIT_DELAY_AFTER_UI_SHOWN)
-				=> F?.e_runDelayed(() => { F?.Focus(); F?.Activate(); F?.BringToFront(); }, DelayMS);
 
-
-			/// <summary>Вызывается с заданной задержкой, после отображения формы на экране.
-			/// Вызывается в UI потоке формы, по событию 'Shown' 
-			/// <para>Таймер задержки начинает считать после события 'F.Shown'</para> </summary>
-			/// <param name="context">Формя событие 'Shown' которой отслеживается и в UIкотоке которой вызывается делегат</param>
-			/// <param name="DelayMS">Задержка вызова в МС, после события 'F.Shown'</param>
+			/// <summary>Executes after form shown on screen, with specifed delay.
+			/// Delay starts after 'Form.Shown' ebent</summary>
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			internal static void e_runDelayed(
+			internal static void e_runDelayedOnFormShown(
 				this Form context,
 				Action action,
 				int DelayMS = C_AWAIT_DELAY_AFTER_UI_SHOWN,
@@ -3173,9 +3410,10 @@ namespace uom
 			}
 
 
-			/// <summary>Executes after form shown with specifed delay. Delay starts after 'Form.Shown'</summary>
+			/// <summary>Executes after form shown on screen, with specifed delay.
+			/// Delay starts after 'Form.Shown' ebent</summary>
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			internal static void e_runDelayed(
+			internal static void e_runDelayedOnFormShown(
 				this Form context,
 				IEnumerable<Task> aAwaitableCallBacks,
 				bool StartTasks,
@@ -3211,9 +3449,10 @@ namespace uom
 				};
 			}
 
+
 			/// <summary>Executes after form shown with specifed delay. Delay starts after 'Form.Shown'</summary>
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			internal static void e_runDelayed(
+			internal static void e_runDelayedOnFormShown(
 				this Form context,
 				Task rAwaitableCallBack,
 				bool StartTasks,
@@ -3221,14 +3460,153 @@ namespace uom
 				bool OnErrorShowMessage = true,
 				bool OnErrorCloseForm = true,
 				bool UseFormWaitCursor = true)
-				=> context.e_runDelayed(new[] { rAwaitableCallBack }, StartTasks, DelayMS, OnErrorShowMessage, OnErrorCloseForm, UseFormWaitCursor);
+				=> context.e_runDelayedOnFormShown(new[] { rAwaitableCallBack }, StartTasks, DelayMS, OnErrorShowMessage, OnErrorCloseForm, UseFormWaitCursor);
+
+
+			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static void e_runDelayed_SetFocus(this Form F, int DelayMS = C_AWAIT_DELAY_AFTER_UI_SHOWN)
+			=> F?.e_runDelayedOnFormShown(() => { F?.Focus(); F?.Activate(); F?.BringToFront(); }, DelayMS);
+
+
+			/// <summary>
+			/// Usually used when you need to do an action with a slight delay after exiting the current method. 
+			/// For example, if some data will be ready only after exiting the control event handler processing branch
+			/// </summary>
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static void e_RunDelayed(
+				this Control ctl,
+				Action delayedAction,
+				int DelayInterval = 100)
+			{
+				ctl.ThrowIfNull();//ArgumentNullException.ThrowIfNull(ctl);
+				delayedAction.ThrowIfNull();//ArgumentNullException.ThrowIfNull(delayedAction);
+
+				//Use 'System.Windows.Forms.Timer' that uses some thread with caller to raise events
+				System.Windows.Forms.Timer tmrDelay = new()
+				{
+					Interval = DelayInterval,
+					Enabled = false //do not start timer untill we finish it's setup
+				};
+				tmrDelay.Tick += (_, _) =>
+				{
+					//first stop and dispose our timer, to avoid double e_runution
+					tmrDelay.Stop();
+					tmrDelay.Dispose();
+
+					//Now start action incontrols UI thread
+					ctl.Invoke(delayedAction);
+				};
+
+				//Start delay timer
+				tmrDelay.Start();
+			}
+
+
 
 			#endregion
+
+
+
+
+
+
+
+
+
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static bool e_tryOnWaitCursor(
+				this Form f,
+				Action a,
+				bool showErrorMessageBox = true,
+				string ErrorMessageBoxTitle = "Error")
+			{
+				try
+				{
+					f.Cursor = Cursors.WaitCursor;
+					try { a.Invoke(); }
+					finally { f.Cursor = Cursors.Default; }
+
+					return true;
+				}
+				catch (Exception ex)
+				{
+					if (showErrorMessageBox) MessageBox.Show(ex.Message.ToString(), ErrorMessageBoxTitle, MessageBoxButtons.OK, MessageBoxIcon.Error);
+					return false;
+				}
+			}
+
+
+
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static void e_RunWhenHandleReady<T>(this T ctl, Action<Control> HandleReadyAction) where T : Control
+			{
+				_ = ctl ?? throw new ArgumentNullException(nameof(ctl));
+
+				if (ctl.Disposing || ctl.IsDisposed) return;
+
+				if (ctl.IsHandleCreated)
+				{
+					HandleReadyAction?.Invoke(ctl);//Control handle already Exist, run immediate
+				}
+				else
+				{
+					//Delay action when handle will be ready...
+					ctl.HandleCreated += (s, e) => HandleReadyAction?.Invoke((T)s!);
+				}
+			}
+
+
+
+
+
+
+			/// <summary>ThreadSafe excute action in control UI thread
+			/// Any errors will be ignored!</summary>
+			/// <param name="ctl">Control in which UI thread action e_runutes</param>
+			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static void e_RunInUIThread(
+				this Control ctl,
+				Action? a,
+				bool useBeginInvoke = false)
+			{
+				ctl.ThrowIfNull();//				ArgumentNullException.ThrowIfNull(ctl);
+				if (a == null) return;
+
+				try
+				{
+					if (!ctl.IsHandleCreated || ctl.IsDisposed) return;
+					if (useBeginInvoke) { ctl.BeginInvoke(a); return; }
+					if (ctl.InvokeRequired) { ctl.Invoke(a); return; }
+					a.Invoke();
+				}
+				catch (ObjectDisposedException) { }//just ignore			
+			}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 			#region SetIcon_
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			private static void SetIcon_Core<t>(this t Ctl, System.Drawing.Icon rIcon) where t : class
+			private static void e_SetIcon_Core<t>(this t Ctl, System.Drawing.Icon rIcon) where t : class
 			{
 				switch (Ctl)
 				{
@@ -3328,38 +3706,19 @@ namespace uom
 					Ctl.Handle);
 
 
-			[DllImport(uom.WinAPI.core.WINDLL_USER, SetLastError = true, CharSet = CharSet.Auto, CallingConvention = CallingConvention.Winapi)]
-			private static extern IntPtr SendMessage(
-				[In] IntPtr hwnd,
-				[In] int wMsg,
-				[In] int wParam,
-				[In, MarshalAs(UnmanagedType.LPTStr)] string? lParam);
 
-			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void e_SetVistaCueBanner(this TextBox ctl, string? BannerText = null)
-			{
-				_ = ctl ?? throw new ArgumentNullException(nameof(ctl));
 
-				const int EM_SETCUEBANNER = 0x1501;
-				ctl.RunWhenHandleReady(tb => SendMessage(tb.Handle, EM_SETCUEBANNER, 0, BannerText));
-			}
 
-			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void RunWhenHandleReady<T>(this T ctl, Action<Control> HandleReadyAction) where T : Control
-			{
-				_ = ctl ?? throw new ArgumentNullException(nameof(ctl));
-				if (ctl.Disposing || ctl.IsDisposed) return;
 
-				if (ctl.IsHandleCreated)
-				{
-					HandleReadyAction?.Invoke(ctl);//Control handle already Exist, run immediate
-				}
-				else
-				{
-					//Delay action when handle will be ready...
-					ctl.HandleCreated += (s, e) => HandleReadyAction?.Invoke((T)s!);
-				}
-			}
+
+
+
+
+
+
+
+
+
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			public static void e_SetStyleInternal(this Control ctl, ControlStyles st, bool bset)
@@ -3468,84 +3827,30 @@ namespace uom
 
 
 
+
+
+		}
+
+
+		[DebuggerStepThrough]
+		internal static partial class Extensions_Controls_TextBox
+		{
+
+
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void SetVistaCueBanner(this TextBox ctl, string? BannerText = null)
+			public static void e_SetVistaCueBanner(this TextBox ctl, string? BannerText = null)
 			{
-				ctl.ThrowIfNull();//ArgumentNullException.ThrowIfNull(ctl);
-				ctl.ExecWhenHandleReady(tb => WinAPI.Windows.SendMessage(
+				_ = ctl ?? throw new ArgumentNullException(nameof(ctl));
+
+				ctl.e_RunWhenHandleReady(tb => WinAPI.Windows.SendMessage(
 					tb.Handle,
-					WinAPI.Windows.WindowMessages.EM_SETCUEBANNER,
+					(int)WinAPI.Windows.TextBoxMessages.EM_SETCUEBANNER,
 					0,
 					BannerText));
 			}
 
 
-			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static bool tryOnWaitCursor(
-				this Form f,
-				Action a,
-				bool showErrorMessageBox = true,
-				string ErrorMessageBoxTitle = "Error")
-			{
-				try
-				{
-					f.Cursor = Cursors.WaitCursor;
-					try { a.Invoke(); }
-					finally { f.Cursor = Cursors.Default; }
 
-					return true;
-				}
-				catch (Exception ex)
-				{
-					if (showErrorMessageBox) MessageBox.Show(ex.Message.ToString(), ErrorMessageBoxTitle, MessageBoxButtons.OK, MessageBoxIcon.Error);
-					return false;
-				}
-			}
-
-
-
-			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void ExecWhenHandleReady<T>(this T ctl, Action<Control> HandleReadyAction) where T : Control
-			{
-				_ = ctl ?? throw new ArgumentNullException(nameof(ctl));
-				if (ctl.Disposing || ctl.IsDisposed) return;
-
-				if (ctl.IsHandleCreated)    //Control handle already Exist, run immediate
-					HandleReadyAction?.Invoke(ctl);
-				else            //Delay action when handle will be ready...
-					ctl.HandleCreated += (s, e) => HandleReadyAction?.Invoke((T)s!);
-			}
-
-
-			/// <summary>
-			/// Usually used when you need to do an action with a slight delay after exiting the current method. 
-			/// For example, if some data will be ready only after exiting the control event handler processing branch
-			/// </summary>
-			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void ExecDelayed(this Control ctl, Action delayedAction, int DelayInterval = 100)
-			{
-				ctl.ThrowIfNull();//ArgumentNullException.ThrowIfNull(ctl);
-				delayedAction.ThrowIfNull();//ArgumentNullException.ThrowIfNull(delayedAction);
-
-				//Use 'System.Windows.Forms.Timer' that uses some thread with caller to raise events
-				System.Windows.Forms.Timer tmrDelay = new()
-				{
-					Interval = DelayInterval,
-					Enabled = false //do not start timer untill we finish it's setup
-				};
-				tmrDelay.Tick += (_, _) =>
-				{
-					//first stop and dispose our timer, to avoid double execution
-					tmrDelay.Stop();
-					tmrDelay.Dispose();
-
-					//Now start action incontrols UI thread
-					ctl.Invoke(delayedAction);
-				};
-
-				//Start delay timer
-				tmrDelay.Start();
-			}
 
 
 			#region AttachDelayedFilter
@@ -3564,7 +3869,7 @@ namespace uom
 			/// <param name="VistaCueBanner">Vista cueabanner text</param>
 			/// <param name="SetBackColorAsSystemTipColor">Sets the background color for textbox to Systemcolors.Info</param>
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void AttachDelayedFilter(
+			public static void e_AttachDelayedFilter(
 				this TextBox txtCtl,
 				Action<string> OnTextChangedCallBack,
 				int TextEditiDelay = DEFAULT_TEXT_EDIT_DELAY,
@@ -3576,7 +3881,7 @@ namespace uom
 
 				if (!string.IsNullOrWhiteSpace(VistaCueBanner))
 				{
-					txtCtl.SetVistaCueBanner(VistaCueBanner);
+					txtCtl.e_SetVistaCueBanner(VistaCueBanner);
 				}
 
 				if (SetBackColorAsSystemTipColor)
@@ -3600,7 +3905,7 @@ namespace uom
 
 			/// <inheritdoc cref="AttachDelayedFilter" />
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void AttachDelayedFilter(
+			public static void e_AttachDelayedFilter(
 				this TextBox txtCtl,
 				Action TextChangedCallBack,
 				int iDelay_ms = DEFAULT_TEXT_EDIT_DELAY,
@@ -3608,7 +3913,7 @@ namespace uom
 				bool SetBackColorAsSystemTipColor = true)
 			{
 				Action<string> DummyCallback = new((s) => TextChangedCallBack.Invoke());
-				txtCtl.AttachDelayedFilter(
+				txtCtl.e_AttachDelayedFilter(
 					DummyCallback,
 					iDelay_ms,
 					VistaCueBanner,
@@ -3618,28 +3923,13 @@ namespace uom
 			#endregion
 
 
-			/// <summary>ThreadSafe excute action in control UI thread
-			/// Any errors will be ignored!</summary>
-			/// <param name="ctl">Control in which UI thread action executes</param>
-			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void ExecInUIThread(
-				this Control ctl,
-				Action? a,
-				bool useBeginInvoke = false)
-			{
-				ctl.ThrowIfNull();//				ArgumentNullException.ThrowIfNull(ctl);
-				if (a == null) return;
 
-				try
-				{
-					if (!ctl.IsHandleCreated || ctl.IsDisposed) return;
-					if (useBeginInvoke) { ctl.BeginInvoke(a); return; }
-					if (ctl.InvokeRequired) { ctl.Invoke(a); return; }
-					a.Invoke();
-				}
-				catch (ObjectDisposedException) { }//just ignore			
-			}
+		}
 
+
+		[DebuggerStepThrough]
+		internal static class Extensions_Controls_Combobox
+		{
 
 
 
@@ -3664,17 +3954,20 @@ namespace uom
 				=> (cbo.SelectedIndex < 0) ? null : cbo.e_GetItemsAs_ComboboxItemContainerOf<T>()[cbo.SelectedIndex];
 
 
+
+
 		}
 
+
 		[DebuggerStepThrough]
-		public static partial class Extensions_Controls_Listview
+		internal static partial class Extensions_Controls_Listview
 		{
 			/*	 
 
 
-	<DebuggerNonUserCode, DebuggerStepThrough>
-	<MethodImpl(MethodImplOptions.AggressiveInlining), System.Runtime.CompilerServices.Extension()>
-	Friend Sub  AddSubitems(ByVal li As Global.System.Windows.Forms.ListViewItem,
+		<DebuggerNonUserCode, DebuggerStepThrough>
+		<MethodImpl(MethodImplOptions.AggressiveInlining), System.Runtime.CompilerServices.Extension()>
+		Friend Sub  AddSubitems(ByVal li As Global.System.Windows.Forms.ListViewItem,
 								  ByVal ParamArray aSubItemsText() As String)
 
 		If (li Is Nothing) Then Return
@@ -3682,12 +3975,12 @@ namespace uom
 		For Each S In aSubItemsText
 			Call li.SubItems.Add(S)
 		Next
-	End Sub
+		End Sub
 		 */
 
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void AutoSizeColumns(this ListView? lvw)
+			public static void e_AutoSizeColumns(this ListView? lvw)
 			{
 				if (lvw == null) return;
 
@@ -3698,13 +3991,13 @@ namespace uom
 			}
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void ClearItemsAndGroups(
+			public static void e_ClearItemsAndGroups(
 				this ListView? lvw,
 				bool autoSizeColumns = true,
 				bool clearGroups = true,
 				bool clearColumns = false)
 			{
-				lvw?.ExecOnLockedUpdate(() =>
+				lvw?.e_runOnLockedUpdate(() =>
 				{
 					lvw?.Items.Clear();
 					if (clearGroups) lvw?.Groups.Clear();
@@ -3715,11 +4008,11 @@ namespace uom
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
 			public static void ClearItems(this ListView lvw, bool autoSizeColumns = false)
-				=> lvw.ClearItemsAndGroups(autoSizeColumns, false);
+				=> lvw.e_ClearItemsAndGroups(autoSizeColumns, false);
 
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void AddFakeSubitems(
+			public static void e_AddFakeSubitems(
 				this ListViewItem? li,
 				int ListViewColumnsCount,
 				string fakeText = "")
@@ -3729,7 +4022,7 @@ namespace uom
 
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void AddFakeSubitems(
+			public static void e_AddFakeSubitems(
 				this ListViewItem? li,
 				ListView? lvw = null,
 				string fakeText = "")
@@ -3738,19 +4031,19 @@ namespace uom
 
 				lvw ??= li.ListView;
 				lvw.ThrowIfNull();//ArgumentNullException.ThrowIfNull(lvw);
-				li?.AddFakeSubitems(lvw.Columns.Count, fakeText);
+				li?.e_AddFakeSubitems(lvw.Columns.Count, fakeText);
 			}
 
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void UpdateTexts(
+			public static void e_UpdateTexts(
 				 this ListViewItem? li,
 				 int startIndex,
 				 params string?[] aSubItemsText)
 			{
 				if (li == null || !aSubItemsText.Any()) return;
 
-				li.ListView.ExecOnLockedUpdate(() =>
+				li.ListView.e_runOnLockedUpdate(() =>
 				{
 					int i = 0;
 					aSubItemsText.e_ForEach(text =>
@@ -3763,19 +4056,19 @@ namespace uom
 
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void UpdateTexts(this ListViewItem? li, params string[] aSubItemsText)
-				=> UpdateTexts(li, 0, aSubItemsText);
+			public static void e_UpdateTexts(this ListViewItem? li, params string[] aSubItemsText)
+				=> e_UpdateTexts(li, 0, aSubItemsText);
 
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static IEnumerable<ListViewGroup> GroupsAsIEnumerable(this ListView lvw)
+			public static IEnumerable<ListViewGroup> e_GroupsAsIEnumerable(this ListView lvw)
 				=> lvw.Groups.Cast<ListViewGroup>();
 
 
 #if NETCOREAPP3_0_OR_GREATER
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static (ListViewGroup Group, bool Created) GroupsCreateGroupByKey(
+			public static (ListViewGroup Group, bool Created) e_GroupsCreateGroupByKey(
 				this ListView lvw,
 				string key,
 				string? header = null,
@@ -3783,7 +4076,7 @@ namespace uom
 				Action<ListViewGroup>? onNewGroup = null
 				)
 			{
-				ListViewGroup? grp = lvw.GroupsAsIEnumerable()?.Where(g => (g.Name == key)).FirstOrDefault();
+				ListViewGroup? grp = lvw.e_GroupsAsIEnumerable()?.Where(g => (g.Name == key)).FirstOrDefault();
 				bool exist = (grp != null);
 				if (!exist)
 				{
@@ -3797,7 +4090,7 @@ namespace uom
 #endif
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static (ListViewGroup Group, bool Created) GroupsCreateGroupByKey(
+			public static (ListViewGroup Group, bool Created) e_GroupsCreateGroupByKey(
 				Dictionary<string, ListViewGroup> dicGroups,
 				string key,
 				string? header = null,
@@ -3816,10 +4109,10 @@ namespace uom
 
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void SetGroupsTitlesFast(
+			public static void e_SetGroupsTitlesFast(
 				this ListView? lvw,
 				Func<ListViewGroup, string>? getGroupHeader = null)
-					=> lvw?.GroupsAsIEnumerable().e_ForEach(g =>
+					=> lvw?.e_GroupsAsIEnumerable().e_ForEach(g =>
 				{
 					string sTitle = g.Name ?? "";
 					if (getGroupHeader != null)
@@ -3834,16 +4127,16 @@ namespace uom
 
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void SetAllGroupsState(
+			public static void e_SetAllGroupsState(
 				this ListView? lvw,
 				ListViewGroupCollapsedState state = ListViewGroupCollapsedState.Collapsed)
-					=> lvw?.GroupsAsIEnumerable().e_ForEach(g => g.CollapsedState = state);
+					=> lvw?.e_GroupsAsIEnumerable().e_ForEach(g => g.CollapsedState = state);
 
 #endif
 
 			///<summary>MT Safe!!!</summary>
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void ExecOnLockedUpdate(
+			public static void e_runOnLockedUpdate(
 				this ListView? lvw,
 				Action? a,
 				bool autoSizeColumns = false,
@@ -3857,21 +4150,48 @@ namespace uom
 					try { a.Invoke(); }
 					finally
 					{
-						if (autoSizeColumns) lvw?.AutoSizeColumns();
-						if (fastUpdateGroupHeaders) lvw?.SetGroupsTitlesFast();
+						if (autoSizeColumns) lvw?.e_AutoSizeColumns();
+						if (fastUpdateGroupHeaders) lvw?.e_SetGroupsTitlesFast();
 						lvw?.EndUpdate();
 					}
 				});
 
 				if (lvw != null && lvw.InvokeRequired)
-					lvw.ExecInUIThread(a2);
+					lvw.e_runInUIThread(a2);
 				else
 					a2.Invoke();
 			}
 
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static async Task<T?> ExecOnLockedUpdateAsync<T>(
+			public static async Task<T?> e_runOnLockedUpdateAsync<T>(
+				this ListView lvw,
+				Func<Task<T?>> tsk,
+				bool autoSizeColumns = false,
+				bool fastUpdateGroupHeaders = false) where T : class
+			{
+				//ArgumentNullException.ThrowIfNull(tsk);
+				tsk.ThrowIfNull();// = tsk ?? throw new ArgumentNullException(nameof(tsk));
+
+				lvw?.BeginUpdate();
+				try
+				{
+					//tsk.Start();
+					T? ret = await tsk.Invoke();
+					return ret;
+				}
+				finally
+				{
+					if (autoSizeColumns) lvw?.e_AutoSizeColumns();
+					if (fastUpdateGroupHeaders) lvw?.e_SetGroupsTitlesFast();
+					lvw?.EndUpdate();
+				}
+			}
+
+			/*
+
+			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static async Task<T?> e_runOnLockedUpdateAsync<T>(
 				this ListView lvw,
 				Task<T?> tsk,
 				bool autoSizeColumns = false,
@@ -3889,20 +4209,20 @@ namespace uom
 				}
 				finally
 				{
-					if (autoSizeColumns) lvw?.AutoSizeColumns();
-					if (fastUpdateGroupHeaders) lvw?.SetGroupsTitlesFast();
+					if (autoSizeColumns) lvw?.e_AutoSizeColumns();
+					if (fastUpdateGroupHeaders) lvw?.e_SetGroupsTitlesFast();
 					lvw?.EndUpdate();
 				}
 			}
-
+						 */
 
 			//************************************** OLD
 
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void SelectFirstItem(this ListView lvw)
+			public static void e_SelectFirstItem(this ListView lvw)
 			{
-				var first = lvw.ItemsAsIEnumerable().FirstOrDefault();
+				var first = lvw.e_ItemsAsIEnumerable().FirstOrDefault();
 				if (first == default) return;
 
 				first.Selected = true;
@@ -3911,11 +4231,11 @@ namespace uom
 			}
 
 
-			public static void AddSubitems(this ListViewItem? li, params string[] subitems)
+			public static void e_AddSubitems(this ListViewItem? li, params string[] subitems)
 				=> subitems?.e_ForEach(s => li?.SubItems.Add(s));
 
 
-			public static async void FlashAsync(this ListViewItem? li, int flashCount = 10)
+			public static async void e_FlashAsync(this ListViewItem? li, int flashCount = 10)
 			{
 				if (li == null) return;
 
@@ -3934,14 +4254,14 @@ namespace uom
 
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void ItemsRemoveRange(
+			public static void e_ItemsRemoveRange(
 				this ListView? lvw,
 				IEnumerable<ListViewItem> ItemsToRemove,
 				bool aAutoSizeColumnsAtFinish = false)
-				=> lvw?.ExecOnLockedUpdate(() => lvw?.Items.ItemsRemoveRange(ItemsToRemove), aAutoSizeColumnsAtFinish);
+				=> lvw?.e_runOnLockedUpdate(() => lvw?.Items.e_ItemsRemoveRange(ItemsToRemove), aAutoSizeColumnsAtFinish);
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static void ItemsRemoveRange(
+			public static void e_ItemsRemoveRange(
 				this ListView.ListViewItemCollection liC,
 				IEnumerable<ListViewItem> ItemsToRemove)
 					=> ItemsToRemove.e_ForEach(li => liC.Remove(li));
@@ -3950,42 +4270,44 @@ namespace uom
 			#region ItemsAsIEnumerable
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static IEnumerable<ListViewItem> ItemsAsIEnumerable(this ListView lvw) => lvw.Items.Cast<ListViewItem>();
+			public static IEnumerable<ListViewItem> e_ItemsAsIEnumerable(this ListView lvw) => lvw.Items.Cast<ListViewItem>();
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static IEnumerable<ListViewItem> ItemsAsIEnumerable(this ListViewGroup G) => G.Items.Cast<ListViewItem>();
+			public static IEnumerable<ListViewItem> e_ItemsAsIEnumerable(this ListViewGroup G) => G.Items.Cast<ListViewItem>();
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static IEnumerable<ListViewItem> SelectedItemsAsIEnumerable(this ListView lvw) => lvw.SelectedItems.Cast<ListViewItem>();
+			public static IEnumerable<ListViewItem> e_SelectedItemsAsIEnumerable(this ListView lvw) => lvw.SelectedItems.Cast<ListViewItem>();
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static IEnumerable<ListViewItem> CheckedItemsAsIEnumerable(this ListView lvw) => lvw.CheckedItems.Cast<ListViewItem>();
+			public static IEnumerable<ListViewItem> e_CheckedItemsAsIEnumerable(this ListView lvw) => lvw.CheckedItems.Cast<ListViewItem>();
 
 			#endregion
 
 
 			#region ItemsAndTags
 
-			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static T? TagAs<T>(this ListViewGroup lvg) => (T?)lvg.Tag;
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static T? TagAs<T>(this ListViewItem li) => (T?)li.Tag;
+			public static T? e_TagAs<T>(this ListViewGroup lvg) => (T?)lvg.Tag;
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static T? TagAs<T>(this TreeNode nd) => (T?)nd.Tag;
+			public static T? e_TagAs<T>(this ListViewItem li) => (T?)li.Tag;
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static T? TagAs<T>(this Control ctl) => (T?)ctl.Tag;
+			public static T? e_TagAs<T>(this TreeNode nd) => (T?)nd.Tag;
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static int ItemsCount_Selected(this ListView lvw) => lvw.SelectedItems.Count;
+			public static T? e_TagAs<T>(this Control ctl) => (T?)ctl.Tag;
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static int ItemsCount_Checked(this ListView lvw) => lvw.CheckedItems.Count;
+			public static int e_ItemsCount_Selected(this ListView lvw) => lvw.SelectedItems.Count;
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static int ItemsCount(this ListView lvw) => lvw.Items.Count;
+			public static int e_ItemsCount_Checked(this ListView lvw) => lvw.CheckedItems.Count;
+
+			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static int e_ItemsCount(this ListView lvw) => lvw.Items.Count;
+
 
 			#region ItemsAndTags2
 
@@ -3995,77 +4317,79 @@ namespace uom
 
 				public ListViewItemAndTag(ListViewItem li) : base() { Item = li; }
 
-				public T? Tag => Item.TagAs<T>();
+				public T? Tag => Item.e_TagAs<T>();
 			}
 
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static IEnumerable<T?> Tags<T>(this IEnumerable<ListViewItemAndTag<T>> A)
+			public static IEnumerable<T?> e_Tags<T>(this IEnumerable<ListViewItemAndTag<T>> A)
 				=> A.Select(li => li.Tag);
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static IEnumerable<ListViewItem> Items<T>(this IEnumerable<ListViewItemAndTag<T>> A)
+			public static IEnumerable<ListViewItem> e_Items<T>(this IEnumerable<ListViewItemAndTag<T>> A)
 				=> A.Select(li => li.Item);
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static IEnumerable<ListViewItemAndTag<T>> ItemsAndTags<T>(this IEnumerable<ListViewItem> A)
+			public static IEnumerable<ListViewItemAndTag<T>> e_ItemsAndTags<T>(this IEnumerable<ListViewItem> A)
 				=> A.Select(li => new ListViewItemAndTag<T>(li));
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static IEnumerable<ListViewItemAndTag<T>> ItemsAndTags<T>(this ListViewGroup G)
-				=> ItemsAndTags<T>(G.ItemsAsIEnumerable());
+			public static IEnumerable<ListViewItemAndTag<T>> e_ItemsAndTags<T>(this ListViewGroup G)
+				=> e_ItemsAndTags<T>(G.e_ItemsAsIEnumerable());
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static IEnumerable<ListViewItemAndTag<T>> ItemsAndTags<T>(this ListView lvw)
-				=> ItemsAndTags<T>(lvw.ItemsAsIEnumerable());
+			public static IEnumerable<ListViewItemAndTag<T>> e_ItemsAndTags<T>(this ListView lvw)
+				=> e_ItemsAndTags<T>(lvw.e_ItemsAsIEnumerable());
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static IEnumerable<ListViewItemAndTag<T>> SelectedItemsAndTags<T>(this ListView lvw)
-				=> ItemsAndTags<T>(lvw.SelectedItemsAsIEnumerable());
+			public static IEnumerable<ListViewItemAndTag<T>> e_SelectedItemsAndTags<T>(this ListView lvw)
+				=> e_ItemsAndTags<T>(lvw.e_SelectedItemsAsIEnumerable());
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static IEnumerable<ListViewItemAndTag<T>> CheckedItemsAndTags<T>(this ListView lvw)
-				=> ItemsAndTags<T>(lvw.CheckedItemsAsIEnumerable());
+			public static IEnumerable<ListViewItemAndTag<T>> e_CheckedItemsAndTags<T>(this ListView lvw)
+				=> e_ItemsAndTags<T>(lvw.e_CheckedItemsAsIEnumerable());
 
 
 			#endregion
+
 
 			#region ItemsAs
 
-			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static IEnumerable<T> ItemsAs<T>(this ListViewGroup lvg) where T : ListViewItem => lvg.Items.Cast<T>();
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static IEnumerable<T> ItemsAs<T>(this ListView lvw) where T : ListViewItem => lvw.Items.Cast<T>();
+			public static IEnumerable<T> e_ItemsAs<T>(this ListViewGroup lvg) where T : ListViewItem => lvg.Items.Cast<T>();
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static IEnumerable<T> SelectedItemsAs<T>(this ListView lvw) where T : ListViewItem => lvw.SelectedItems.Cast<T>();
+			public static IEnumerable<T> e_ItemsAs<T>(this ListView lvw) where T : ListViewItem => lvw.Items.Cast<T>();
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static IEnumerable<T> CheckedItemsAs<T>(this ListView lvw) where T : ListViewItem => lvw.CheckedItems.Cast<T>();
+			public static IEnumerable<T> e_SelectedItemsAs<T>(this ListView lvw) where T : ListViewItem => lvw.SelectedItems.Cast<T>();
+
+			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static IEnumerable<T> e_CheckedItemsAs<T>(this ListView lvw) where T : ListViewItem => lvw.CheckedItems.Cast<T>();
 
 			#endregion
 
 			#endregion
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static IEnumerable<ColumnHeader> ColumnsAsIEnumerable(this ListView lvw) => lvw.Columns.Cast<ColumnHeader>();
+			public static IEnumerable<ColumnHeader> e_ColumnsAsIEnumerable(this ListView lvw) => lvw.Columns.Cast<ColumnHeader>();
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static ListViewGroup? GroupsGetByKey(this ListView lvw, string? key)
-				=> lvw.GroupsAsIEnumerable().Where(grp => (grp.Name ?? "") == (key ?? "")).FirstOrDefault();
+			public static ListViewGroup? e_GroupsGetByKey(this ListView lvw, string? key)
+				=> lvw.e_GroupsAsIEnumerable().Where(grp => (grp.Name ?? "") == (key ?? "")).FirstOrDefault();
 
 
 			/// <summary>Предыдущий элемент (Index меньше на 1)</summary>
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static ListViewItem? Previous(this ListViewItem li)
+			public static ListViewItem? e_Previous(this ListViewItem li)
 				=> (li.Index <= 0) ? null : li.ListView.Items[li.Index - 1];
 
 			/// <summary>Предыдущий элемент в той же группе (Index меньше на 1)</summary>
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static ListViewItem? PreviousInGroup(this ListViewItem li)
+			public static ListViewItem? e_PreviousInGroup(this ListViewItem li)
 			{
-				var liPrev = li.Previous();
+				var liPrev = li.e_Previous();
 				if (liPrev != null && object.ReferenceEquals(liPrev.Group, li.Group)) return liPrev;
 				return null;
 			}
@@ -4073,15 +4397,15 @@ namespace uom
 
 			/// <summary>Next элемент (Index +1)</summary>
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static ListViewItem? Next(this ListViewItem li)
+			public static ListViewItem? e_Next(this ListViewItem li)
 				=> (li.Index >= (li.ListView.Items.Count - 1)) ? null : li.ListView.Items[li.Index + 1];
 
 
 			/// <summary>Next элемент в той же группе (Index +1)</summary>
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static ListViewItem? NextInGroup(this ListViewItem li)
+			public static ListViewItem? e_NextInGroup(this ListViewItem li)
 			{
-				var liNext = li.Next();
+				var liNext = li.e_Next();
 				if (liNext != null && object.ReferenceEquals(liNext.Group, li.Group)) return liNext;
 				return null;
 			}
@@ -4089,7 +4413,7 @@ namespace uom
 
 
 		[DebuggerStepThrough]
-		public static partial class Extensions_Controls_ProgressBar
+		internal static partial class Extensions_Controls_ProgressBar
 		{
 
 
@@ -4125,6 +4449,179 @@ namespace uom
 			}
 		}
 
+
+		[DebuggerStepThrough]
+		internal static partial class Extensions_Controls_CommonDislogs
+		{
+
+
+			public const string C_DEFAULT_XML_EXT = "xml";
+			public const string C_DEFAULT_XML_EXPORT_FILTER = "XML-files|*." + C_DEFAULT_XML_EXT;
+
+
+			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static void e_InitDefault(this SaveFileDialog sfd, string defaultExt, string filter)
+			{
+				sfd.ShowHelp = false;
+				sfd.AddExtension = true;
+				sfd.AutoUpgradeEnabled = true;
+				sfd.CheckPathExists = true;
+				sfd.DereferenceLinks = true;
+				sfd.DefaultExt = defaultExt;
+				sfd.SupportMultiDottedExtensions = true;
+				sfd.ValidateNames = true;
+				sfd.Filter = filter;
+				sfd.OverwritePrompt = true;
+			}
+
+
+			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static void e_InitDefault(this OpenFileDialog ofd, string defaultExt, string filter, bool Multiselect = false)
+			{
+				ofd.ShowHelp = false;
+				ofd.ShowReadOnly = false;
+
+				ofd.AutoUpgradeEnabled = true;
+
+				ofd.AddExtension = true;
+				ofd.CheckPathExists = true;
+				ofd.CheckFileExists = true;
+				ofd.DereferenceLinks = true;
+				ofd.SupportMultiDottedExtensions = true;
+				ofd.ValidateNames = true;
+				ofd.Multiselect = Multiselect;
+
+				ofd.Filter = filter;
+				if (defaultExt.e_IsNOTNullOrWhiteSpace()) ofd.DefaultExt = defaultExt;
+			}
+
+
+			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static string[] e_OpenLoadFilesDialog(
+				this Form owner,
+				string defaultExt = "",
+				string filter = C_DEFAULT_XML_EXPORT_FILTER,
+				bool multiselect = true,
+				string initialFile = "",
+				string initialDirectory = "")
+			{
+				using OpenFileDialog ofd = new();
+				ofd.e_InitDefault(defaultExt, filter, multiselect);
+
+				ofd.Filter = filter;
+
+				if (initialFile.e_IsNOTNullOrWhiteSpace()) ofd.FileName = initialFile;
+				if (initialDirectory.e_IsNOTNullOrWhiteSpace()) ofd.InitialDirectory = initialDirectory;
+
+				return (ofd.ShowDialog(owner) != DialogResult.OK)
+					? Array.Empty<string>()
+					: ofd.FileNames;
+			}
+
+
+			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static string e_OpenLoadFileDialog(
+				this Form owner,
+				string defaultExt = "",
+				string filter = C_DEFAULT_XML_EXPORT_FILTER,
+				string initialFile = "",
+				string initialDirectory = "")
+				=> e_OpenLoadFilesDialog(owner,
+					defaultExt,
+					filter,
+					false,
+					initialFile,
+					initialDirectory).FirstOrDefault() ?? string.Empty;
+
+
+
+			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static string e_OpenLoadFileDialog(
+				this Form owner,
+				string defaultExt = "",
+				string filter = C_DEFAULT_XML_EXPORT_FILTER,
+				string initialFile = "",
+				Environment.SpecialFolder initialDirectory = Environment.SpecialFolder.DesktopDirectory)
+				=> e_OpenLoadFileDialog(owner,
+					defaultExt,
+					filter,
+					initialFile,
+					System.Environment.GetFolderPath(initialDirectory));
+
+
+
+			/*
+
+
+
+
+
+
+
+
+
+					<DebuggerNonUserCode, DebuggerStepThrough>
+					<MethodImpl(MethodImplOptions.AggressiveInlining), Extension()>
+					Public Function e_OpenSaveFileDialog(ParentForm As Form,
+															  Optional sDefaultFileName As String = vbNullString,
+															  Optional sDefaultExt As String = C_DEFAULT_XML_EXT,
+															  Optional sFilter As String = C_DEFAULT_XML_EXPORT_FILTER,
+															  Optional sAutoFileNameSuffix As String = "Данные от",
+															  Optional neInitialDirectory As Nullable(Of Environment.SpecialFolder) = Environment.SpecialFolder.DesktopDirectory) As String
+						Using SFD As New SaveFileDialog
+							With SFD
+								If (sDefaultFileName.e_IsNullOrWhiteSpace) Then
+									sDefaultFileName = Now.ToFileName
+									If (sAutoFileNameSuffix.e_IsNOTNullOrWhiteSpace) Then sDefaultFileName = sAutoFileNameSuffix & " " & sDefaultFileName
+								End If
+								.FileName = sDefaultFileName
+
+								.DefaultExt = sDefaultExt
+								.Filter = sFilter
+
+								.AddExtension = True
+								.AutoUpgradeEnabled = True
+								.CheckPathExists = True
+								.DereferenceLinks = True
+								.ShowHelp = False
+								.SupportMultiDottedExtensions = True
+								.ValidateNames = True
+
+
+								If neInitialDirectory.HasValue Then
+									Dim eInitialDirectory = neInitialDirectory.Value
+									.InitialDirectory = Environment.GetFolderPath(eInitialDirectory)
+								End If
+
+								If (.ShowDialog(ParentForm) <> Forms.DialogResult.OK) Then Return vbNullString
+
+								Return .FileName
+							End With
+						End Using
+					End Function
+
+
+
+
+
+					#End Region
+
+
+							 */
+
+
+
+
+
+
+
+
+
+
+
+
+
+		}
 
 		/// <summary>Network Extensions</summary>    
 		internal static class Extensions_IO_Win
@@ -4275,7 +4772,7 @@ namespace uom
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
 			internal static void e_OpenExplorer(this FileSystemInfo FI, uom.AppTools.WindowsExplorerPathModes PathMode = uom.AppTools.C_DEFAULT_EXPLORER_MODE)
-	=> FI.FullName.e_OpenExplorer(PathMode);
+		=> FI.FullName.e_OpenExplorer(PathMode);
 
 
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -4721,7 +5218,7 @@ namespace uom
 
 			/// <summary>Вызывает Callback внутри Try/Catch и при ошибке автоматом вызывает ex.FIX_ERROR(ShowModalMessageBox)</summary>
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			internal static void ExecInFIX_ERROR(this Action A,
+			internal static void e_runInFIX_ERROR(this Action A,
 				bool ShowModalMessageBox = true,
 				string ModalMessageBoxTitle = "Не удалось выполнить запрашиваемое действие!",
 				MessageBoxIcon icon = MessageBoxIcon.Error,
@@ -4779,11 +5276,11 @@ namespace uom
 				string sErrorMsg = C_CONSOLE_ERROR_HEADER + EX.Message;
 
 				/* TODO ERROR: Skipped IfDirectiveTrivia
-	#if DEBUG
+		#if DEBUG
 				*//* TODO ERROR: Skipped DisabledTextTrivia
 						ShowFullErrorInfo = True
 				*//* TODO ERROR: Skipped EndIfDirectiveTrivia
-	#endif
+		#endif
 				*/
 				if (ShowFullErrorInfo)
 				{
@@ -5939,6 +6436,8 @@ namespace uom
 		internal static partial class Extensions_WinAPI_GDI
 		{
 
+			public static WinAPI.GDI.DC GetDC(this IWin32Window wnd) => new(wnd.Handle);
+
 			/// <summary>Расчёт точки вывода текста относительно заданной точки</summary>
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			internal static (PointF TextPos, SizeF MeasuredTextSize) e_MeasureStringLocation(
@@ -6704,7 +7203,7 @@ namespace uom
 				ERROR_SYSTEM_TRACE = 150,
 				/// <summary>The number of specified semaphore events for DosMuxSemWait is not correct.</summary>
 				ERROR_INVALID_EVENT_COUNT = 151,
-				/// <summary>DosMuxSemWait did not execute; too many semaphores are already set.</summary>
+				/// <summary>DosMuxSemWait did not e_runute; too many semaphores are already set.</summary>
 				ERROR_TOO_MANY_MUXWAITERS = 152,
 				/// <summary>The DosMuxSemWait list is not correct.</summary>
 				ERROR_INVALID_LIST_FORMAT = 153,
@@ -6984,7 +7483,7 @@ namespace uom
 				ERROR_CANNOT_DETECT_PROCESS_ABORT = 1081,
 				/// <summary>No recovery program has been configured for this service.</summary>
 				ERROR_NO_RECOVERY_PROGRAM = 1082,
-				/// <summary>The executable program that this service is configured to run in does not implement the service.</summary>
+				/// <summary>The e_runutable program that this service is configured to run in does not implement the service.</summary>
 				ERROR_SERVICE_NOT_IN_EXE = 1083,
 				/// <summary>This service cannot be started in Safe Mode.</summary>
 				ERROR_NOT_SAFEBOOT_SERVICE = 1084,
@@ -7265,7 +7764,7 @@ namespace uom
 				ERROR_SYNC_FOREGROUND_REFRESH_REQUIRED = 1274,
 				/// <summary>This driver has been blocked from loading.</summary>
 				ERROR_DRIVER_BLOCKED = 1275,
-				/// <summary>A dynamic link library (DLL) referenced a module that was neither a DLL nor the process's executable image.</summary>
+				/// <summary>A dynamic link library (DLL) referenced a module that was neither a DLL nor the process's e_runutable image.</summary>
 				ERROR_INVALID_IMPORT_OF_NON_DLL = 1276,
 				/// <summary>Windows cannot open this program since it has been disabled.</summary>
 				ERROR_ACCESS_DISABLED_WEBBLADE = 1277,
@@ -7285,7 +7784,7 @@ namespace uom
 				ERROR_DEBUGGER_INACTIVE = 1284,
 				/// <summary>An attempt to delay-load a .dll or get a function address in a delay-loaded .dll failed.</summary>
 				ERROR_DELAY_LOAD_FAILED = 1285,
-				/// <summary>%1 is a 16-bit System.Windows.Forms.Application. You do not have permissions to execute 16-bit applications. Check your permissions with your system administrator.</summary>
+				/// <summary>%1 is a 16-bit System.Windows.Forms.Application. You do not have permissions to e_runute 16-bit applications. Check your permissions with your system administrator.</summary>
 				ERROR_VDM_DISALLOWED = 1286,
 
 				// Add new status codes before this point unless there is a component specific section below.
@@ -7680,9 +8179,9 @@ namespace uom
 				ERROR_INSTALL_TRANSFORM_FAILURE = 1624,
 				/// <summary>This installation is forbidden by system policy. = Contact your system administrator.</summary>
 				ERROR_INSTALL_PACKAGE_REJECTED = 1625,
-				/// <summary>Function could not be executed.</summary>
+				/// <summary>Function could not be e_runuted.</summary>
 				ERROR_FUNCTION_NOT_CALLED = 1626,
-				/// <summary>Function failed during execution.</summary>
+				/// <summary>Function failed during e_runution.</summary>
 				ERROR_FUNCTION_FAILED = 1627,
 				/// <summary>Invalid or unknown table specified.</summary>
 				ERROR_INVALID_TABLE = 1628,
@@ -8044,7 +8543,7 @@ namespace uom
 				// '                    ' ''
 				// '                    '''' <summary>
 				// '                    ' ''
-				// '                    '' The remote procedure call failed and did not execute.
+				// '                    '' The remote procedure call failed and did not e_runute.
 				// '                    ' ''
 				// '                    ''const RPC_S_CALL_FAILED_DNE            1727L
 
@@ -16564,7 +17063,7 @@ namespace uom
 				// '                    ' ''
 				// '                    '''' <summary>
 				// '                    ' ''
-				// '                    '' A blocking operation is currently executing.
+				// '                    '' A blocking operation is currently e_runuting.
 				// '                    ' ''
 				// '                    ''const WSAEINPROGRESS                   10036L
 
@@ -17410,7 +17909,7 @@ namespace uom
 				// '                    ' ''
 				// '                    '''' <summary>
 				// '                    ' ''
-				// '                    '' Lack of system resources has required isolated activation to be disabled for the current thread of execution.
+				// '                    '' Lack of system resources has required isolated activation to be disabled for the current thread of e_runution.
 				// '                    ' ''
 				// '                    ''const ERROR_SXS_THREAD_QUERIES_DISABLED 14010L
 
@@ -22197,7 +22696,7 @@ namespace uom
 				// '                    ' ''
 				// '                    '''' <summary>
 				// '                    ' ''
-				// '                    '' Server execution failed
+				// '                    '' Server e_runution failed
 				// '                    ' ''
 				// '                    ''const CO_E_SERVER_EXEC_FAILURE         _HRESULT_TYPEDEF_(= &h80080005L)
 
@@ -23238,7 +23737,7 @@ namespace uom
 				// '                    ' ''
 				// '                    '''' <summary>
 				// '                    ' ''
-				// '                    '' The callee (server [not server application]) is not available and disappeared; all connections are invalid. The call may have executed.
+				// '                    '' The callee (server [not server application]) is not available and disappeared; all connections are invalid. The call may have e_runuted.
 				// '                    ' ''
 				// '                    ''const RPC_E_SERVER_DIED                _HRESULT_TYPEDEF_(= &h80010007L)
 
@@ -23337,7 +23836,7 @@ namespace uom
 				// '                    ' ''
 				// '                    '''' <summary>
 				// '                    ' ''
-				// '                    '' The callee (server [not server application]) is not available and disappeared; all connections are invalid. The call did not execute.
+				// '                    '' The callee (server [not server application]) is not available and disappeared; all connections are invalid. The call did not e_runute.
 				// '                    ' ''
 				// '                    ''const RPC_E_SERVER_DIED_DNE            _HRESULT_TYPEDEF_(= &h80010012L)
 
@@ -28880,7 +29379,7 @@ namespace uom
 				// '                    ' ''
 				// '                    '''' <summary>
 				// '                    ' ''
-				// '                    '' The COM+ Catalog Server threw an exception during execution
+				// '                    '' The COM+ Catalog Server threw an exception during e_runution
 				// '                    ' ''
 				// '                    ''const COMADMIN_E_CAT_SERVERFAULT       _HRESULT_TYPEDEF_(= &h80110486L)
 
@@ -30179,12 +30678,792 @@ namespace uom
 		{
 			public static readonly IntPtr HWND_DESKTOP = new(0);
 
-			public enum WindowMessages : int
+
+			#region SendMessage
+
+
+			public enum WindowMessages : UInt32
 			{
+				/*
 				WM_PAINT = 0xF,
-				EM_SETCUEBANNER = 0x1501,
-				WM_APPCOMMAND = 0x319
+				WM_APPCOMMAND = 0x319,
+				WM_NOTIFY = 0x004e,
+				WM_LBUTTONDBLCLK = 0x0203,
+				WM_USER = 0x0400,
+			 */
+
+
+				WM_NULL = 0,
+				WM_CREATE = 1,
+				WM_DESTROY = 2,
+				WM_MOVE = 3,
+				WM_SIZE = 5,
+				WM_ACTIVATE = 6,
+				WM_SETFOCUS = 7,
+				WM_KILLFOCUS = 8,
+				WM_ENABLE = 10,
+				WM_SETREDRAW = 11,
+				WM_SETTEXT = 12,
+				WM_GETTEXT = 13,
+				WM_GETTEXTLENGTH = 14,
+				WM_PAINT = 15,
+				WM_CLOSE = 16,
+				WM_QUERYENDSESSION = 17,
+				WM_QUIT = 18,
+				WM_QUERYOPEN = 19,
+				WM_ERASEBKGND = 20,
+				WM_SYSCOLORCHANGE = 21,
+				WM_ENDSESSION = 22,
+				WM_SHOWWINDOW = 24,
+				WM_CTLCOLOR = 25,
+				WM_WININICHANGE = 26,
+				WM_DEVMODECHANGE = 27,
+				WM_ACTIVATEAPP = 28,
+				WM_FONTCHANGE = 29,
+				WM_TIMECHANGE = 30,
+				WM_CANCELMODE = 31,
+				WM_SETCURSOR = 32,
+				WM_MOUSEACTIVATE = 33,
+				WM_CHILDACTIVATE = 34,
+				WM_QUEUESYNC = 35,
+				WM_GETMINMAXINFO = 36,
+				WM_PAINTICON = 38,
+				WM_ICONERASEBKGND = 39,
+				WM_NEXTDLGCTL = 40,
+				WM_SPOOLERSTATUS = 42,
+				WM_DRAWITEM = 43,
+				WM_MEASUREITEM = 44,
+				WM_DELETEITEM = 45,
+				WM_VKEYTOITEM = 46,
+				WM_CHARTOITEM = 47,
+				WM_SETFONT = 48,
+				WM_GETFONT = 49,
+				WM_SETHOTKEY = 50,
+				WM_GETHOTKEY = 51,
+				WM_QUERYDRAGICON = 55,
+				WM_COMPAREITEM = 57,
+				WM_GETOBJECT = 61,
+				WM_COMPACTING = 65,
+				WM_COMMNOTIFY = 68,
+				WM_WINDOWPOSCHANGING = 70,
+				WM_WINDOWPOSCHANGED = 71,
+				WM_POWER = 72,
+				WM_COPYDATA = 74,
+				WM_CANCELJOURNAL = 75,
+				WM_NOTIFY = 78,
+				WM_INPUTLANGCHANGEREQUEST = 80,
+				WM_INPUTLANGCHANGE = 81,
+				WM_TCARD = 82,
+				WM_HELP = 83,
+				WM_USERCHANGED = 84,
+				WM_NOTIFYFORMAT = 85,
+				WM_CONTEXTMENU = 123,
+				WM_STYLECHANGING = 124,
+				WM_STYLECHANGED = 125,
+				WM_DISPLAYCHANGE = 126,
+				WM_GETICON = 127,
+				WM_SETICON = 128,
+				WM_NCCREATE = 129,
+				WM_NCDESTROY = 130,
+				WM_NCCALCSIZE = 131,
+				WM_NCHITTEST = 132,
+				WM_NCPAINT = 133,
+				WM_NCACTIVATE = 134,
+				WM_GETDLGCODE = 135,
+				WM_SYNCPAINT = 136,
+				WM_NCMOUSEMOVE = 160,
+				WM_NCLBUTTONDOWN = 161,
+				WM_NCLBUTTONUP = 162,
+				WM_NCLBUTTONDBLCLK = 163,
+				WM_NCRBUTTONDOWN = 164,
+				WM_NCRBUTTONUP = 165,
+				WM_NCRBUTTONDBLCLK = 166,
+				WM_NCMBUTTONDOWN = 167,
+				WM_NCMBUTTONUP = 168,
+				WM_NCMBUTTONDBLCLK = 169,
+				WM_NCXBUTTONDOWN = 171,
+				WM_NCXBUTTONUP = 172,
+				WM_NCXBUTTONDBLCLK = 173,
+				WM_KEYDOWN = 256,
+				WM_KEYFIRST = 256,
+				WM_KEYUP = 257,
+				WM_CHAR = 258,
+				WM_DEADCHAR = 259,
+				WM_SYSKEYDOWN = 260,
+				WM_SYSKEYUP = 261,
+				WM_SYSCHAR = 262,
+				WM_SYSDEADCHAR = 263,
+				WM_KEYLAST = 264,
+				WM_WNT_CONVERTREQUESTEX = 265,
+				WM_CONVERTREQUEST = 266,
+				WM_CONVERTRESULT = 267,
+				WM_INTERIM = 268,
+				WM_IME_STARTCOMPOSITION = 269,
+				WM_IME_ENDCOMPOSITION = 270,
+				WM_IME_COMPOSITION = 271,
+				WM_IME_KEYLAST = 271,
+				WM_INITDIALOG = 272,
+				WM_COMMAND = 273,
+				WM_SYSCOMMAND = 274,
+				WM_TIMER = 275,
+				WM_HSCROLL = 276,
+				WM_VSCROLL = 277,
+				WM_INITMENU = 278,
+				WM_INITMENUPOPUP = 279,
+				WM_MENUSELECT = 287,
+				WM_MENUCHAR = 288,
+				WM_ENTERIDLE = 289,
+				WM_MENURBUTTONUP = 290,
+				WM_MENUDRAG = 291,
+				WM_MENUGETOBJECT = 292,
+				WM_UNINITMENUPOPUP = 293,
+				WM_MENUCOMMAND = 294,
+				WM_CHANGEUISTATE = 295,
+				WM_UPDATEUISTATE = 296,
+				WM_QUERYUISTATE = 297,
+				WM_CTLCOLORMSGBOX = 306,
+				WM_CTLCOLOREDIT = 307,
+				WM_CTLCOLORLISTBOX = 308,
+				WM_CTLCOLORBTN = 309,
+				WM_CTLCOLORDLG = 310,
+				WM_CTLCOLORSCROLLBAR = 311,
+				WM_CTLCOLORSTATIC = 312,
+				WM_MOUSEFIRST = 512,
+				WM_MOUSEMOVE = 512,
+				WM_LBUTTONDOWN = 513,
+				WM_LBUTTONUP = 514,
+				WM_LBUTTONDBLCLK = 515,
+				WM_RBUTTONDOWN = 516,
+				WM_RBUTTONUP = 517,
+				WM_RBUTTONDBLCLK = 518,
+				WM_MBUTTONDOWN = 519,
+				WM_MBUTTONUP = 520,
+				WM_MBUTTONDBLCLK = 521,
+				WM_MOUSELAST = 521,
+				WM_MOUSEWHEEL = 522,
+				WM_XBUTTONDOWN = 523,
+				WM_XBUTTONUP = 524,
+				WM_XBUTTONDBLCLK = 525,
+				WM_PARENTNOTIFY = 528,
+				WM_ENTERMENULOOP = 529,
+				WM_EXITMENULOOP = 530,
+				WM_NEXTMENU = 531,
+				WM_SIZING = 532,
+				WM_CAPTURECHANGED = 533,
+				WM_MOVING = 534,
+				WM_POWERBROADCAST = 536,
+				WM_DEVICECHANGE = 537,
+				WM_MDICREATE = 544,
+				WM_MDIDESTROY = 545,
+				WM_MDIACTIVATE = 546,
+				WM_MDIRESTORE = 547,
+				WM_MDINEXT = 548,
+				WM_MDIMAXIMIZE = 549,
+				WM_MDITILE = 550,
+				WM_MDICASCADE = 551,
+				WM_MDIICONARRANGE = 552,
+				WM_MDIGETACTIVE = 553,
+				WM_MDISETMENU = 560,
+				WM_ENTERSIZEMOVE = 561,
+				WM_EXITSIZEMOVE = 562,
+				WM_DROPFILES = 563,
+				WM_MDIREFRESHMENU = 564,
+				WM_IME_REPORT = 640,
+				WM_IME_SETCONTEXT = 641,
+				WM_IME_NOTIFY = 642,
+				WM_IME_CONTROL = 643,
+				WM_IME_COMPOSITIONFULL = 644,
+				WM_IME_SELECT = 645,
+				WM_IME_CHAR = 646,
+				WM_IME_REQUEST = 648,
+				WM_IMEKEYDOWN = 656,
+				WM_IME_KEYDOWN = 656,
+				WM_IMEKEYUP = 657,
+				WM_IME_KEYUP = 657,
+				WM_NCMOUSEHOVER = 672,
+				WM_MOUSEHOVER = 673,
+				WM_NCMOUSELEAVE = 674,
+				WM_MOUSELEAVE = 675,
+				WM_CUT = 768,
+				WM_COPY = 769,
+				WM_PASTE = 770,
+				WM_CLEAR = 771,
+				WM_UNDO = 772,
+				WM_RENDERFORMAT = 773,
+				WM_RENDERALLFORMATS = 774,
+				WM_DESTROYCLIPBOARD = 775,
+				WM_DRAWCLIPBOARD = 776,
+				WM_PAINTCLIPBOARD = 777,
+				WM_VSCROLLCLIPBOARD = 778,
+				WM_SIZECLIPBOARD = 779,
+				WM_ASKCBFORMATNAME = 780,
+				WM_CHANGECBCHAIN = 781,
+				WM_HSCROLLCLIPBOARD = 782,
+				WM_QUERYNEWPALETTE = 783,
+				WM_PALETTEISCHANGING = 784,
+				WM_PALETTECHANGED = 785,
+				WM_HOTKEY = 786,
+				WM_PRINT = 791,
+				WM_PRINTCLIENT = 792,
+				WM_APPCOMMAND = 793,
+				WM_HANDHELDFIRST = 856,
+				WM_HANDHELDLAST = 863,
+				WM_AFXFIRST = 864,
+				WM_AFXLAST = 895,
+				WM_PENWINFIRST = 896,
+				WM_RCRESULT = 897,
+				WM_HOOKRCRESULT = 898,
+				WM_GLOBALRCCHANGE = 899,
+				WM_PENMISCINFO = 899,
+				WM_SKB = 900,
+				WM_HEDITCTL = 901,
+				WM_PENCTL = 901,
+				WM_PENMISC = 902,
+				WM_CTLINIT = 903,
+				WM_PENEVENT = 904,
+				WM_PENWINLAST = 911,
+				DDM_SETFMT = 1024,
+				DM_GETDEFID = 1024,
+				NIN_SELECT = 1024,
+				TBM_GETPOS = 1024,
+				WM_PSD_PAGESETUPDLG = 1024,
+				WM_USER = 1024,
+				CBEM_INSERTITEMA = 1025,
+				DDM_DRAW = 1025,
+				DM_SETDEFID = 1025,
+				HKM_SETHOTKEY = 1025,
+				PBM_SETRANGE = 1025,
+				RB_INSERTBANDA = 1025,
+				SB_SETTEXTA = 1025,
+				TB_ENABLEBUTTON = 1025,
+				TBM_GETRANGEMIN = 1025,
+				TTM_ACTIVATE = 1025,
+				WM_CHOOSEFONT_GETLOGFONT = 1025,
+				WM_PSD_FULLPAGERECT = 1025,
+				CBEM_SETIMAGELIST = 1026,
+				DDM_CLOSE = 1026,
+				DM_REPOSITION = 1026,
+				HKM_GETHOTKEY = 1026,
+				PBM_SETPOS = 1026,
+				RB_DELETEBAND = 1026,
+				SB_GETTEXTA = 1026,
+				TB_CHECKBUTTON = 1026,
+				TBM_GETRANGEMAX = 1026,
+				WM_PSD_MINMARGINRECT = 1026,
+				CBEM_GETIMAGELIST = 1027,
+				DDM_BEGIN = 1027,
+				HKM_SETRULES = 1027,
+				PBM_DELTAPOS = 1027,
+				RB_GETBARINFO = 1027,
+				SB_GETTEXTLENGTHA = 1027,
+				TBM_GETTIC = 1027,
+				TB_PRESSBUTTON = 1027,
+				TTM_SETDELAYTIME = 1027,
+				WM_PSD_MARGINRECT = 1027,
+				CBEM_GETITEMA = 1028,
+				DDM_END = 1028,
+				PBM_SETSTEP = 1028,
+				RB_SETBARINFO = 1028,
+				SB_SETPARTS = 1028,
+				TB_HIDEBUTTON = 1028,
+				TBM_SETTIC = 1028,
+				TTM_ADDTOOLA = 1028,
+				WM_PSD_GREEKTEXTRECT = 1028,
+				CBEM_SETITEMA = 1029,
+				PBM_STEPIT = 1029,
+				TB_INDETERMINATE = 1029,
+				TBM_SETPOS = 1029,
+				TTM_DELTOOLA = 1029,
+				WM_PSD_ENVSTAMPRECT = 1029,
+				CBEM_GETCOMBOCONTROL = 1030,
+				PBM_SETRANGE32 = 1030,
+				RB_SETBANDINFOA = 1030,
+				SB_GETPARTS = 1030,
+				TB_MARKBUTTON = 1030,
+				TBM_SETRANGE = 1030,
+				TTM_NEWTOOLRECTA = 1030,
+				WM_PSD_YAFULLPAGERECT = 1030,
+				CBEM_GETEDITCONTROL = 1031,
+				PBM_GETRANGE = 1031,
+				RB_SETPARENT = 1031,
+				SB_GETBORDERS = 1031,
+				TBM_SETRANGEMIN = 1031,
+				TTM_RELAYEVENT = 1031,
+				CBEM_SETEXSTYLE = 1032,
+				PBM_GETPOS = 1032,
+				RB_HITTEST = 1032,
+				SB_SETMINHEIGHT = 1032,
+				TBM_SETRANGEMAX = 1032,
+				TTM_GETTOOLINFOA = 1032,
+				CBEM_GETEXSTYLE = 1033,
+				CBEM_GETEXTENDEDSTYLE = 1033,
+				PBM_SETBARCOLOR = 1033,
+				RB_GETRECT = 1033,
+				SB_SIMPLE = 1033,
+				TB_ISBUTTONENABLED = 1033,
+				TBM_CLEARTICS = 1033,
+				TTM_SETTOOLINFOA = 1033,
+				CBEM_HASEDITCHANGED = 1034,
+				RB_INSERTBANDW = 1034,
+				SB_GETRECT = 1034,
+				TB_ISBUTTONCHECKED = 1034,
+				TBM_SETSEL = 1034,
+				TTM_HITTESTA = 1034,
+				WIZ_QUERYNUMPAGES = 1034,
+				CBEM_INSERTITEMW = 1035,
+				RB_SETBANDINFOW = 1035,
+				SB_SETTEXTW = 1035,
+				TB_ISBUTTONPRESSED = 1035,
+				TBM_SETSELSTART = 1035,
+				TTM_GETTEXTA = 1035,
+				WIZ_NEXT = 1035,
+				CBEM_SETITEMW = 1036,
+				RB_GETBANDCOUNT = 1036,
+				SB_GETTEXTLENGTHW = 1036,
+				TB_ISBUTTONHIDDEN = 1036,
+				TBM_SETSELEND = 1036,
+				TTM_UPDATETIPTEXTA = 1036,
+				WIZ_PREV = 1036,
+				CBEM_GETITEMW = 1037,
+				RB_GETROWCOUNT = 1037,
+				SB_GETTEXTW = 1037,
+				TB_ISBUTTONINDETERMINATE = 1037,
+				TTM_GETTOOLCOUNT = 1037,
+				CBEM_SETEXTENDEDSTYLE = 1038,
+				RB_GETROWHEIGHT = 1038,
+				SB_ISSIMPLE = 1038,
+				TB_ISBUTTONHIGHLIGHTED = 1038,
+				TBM_GETPTICS = 1038,
+				TTM_ENUMTOOLSA = 1038,
+				SB_SETICON = 1039,
+				TBM_GETTICPOS = 1039,
+				TTM_GETCURRENTTOOLA = 1039,
+				RB_IDTOINDEX = 1040,
+				SB_SETTIPTEXTA = 1040,
+				TBM_GETNUMTICS = 1040,
+				TTM_WINDOWFROMPOINT = 1040,
+				RB_GETTOOLTIPS = 1041,
+				SB_SETTIPTEXTW = 1041,
+				TBM_GETSELSTART = 1041,
+				TB_SETSTATE = 1041,
+				TTM_TRACKACTIVATE = 1041,
+				RB_SETTOOLTIPS = 1042,
+				SB_GETTIPTEXTA = 1042,
+				TB_GETSTATE = 1042,
+				TBM_GETSELEND = 1042,
+				TTM_TRACKPOSITION = 1042,
+				RB_SETBKCOLOR = 1043,
+				SB_GETTIPTEXTW = 1043,
+				TB_ADDBITMAP = 1043,
+				TBM_CLEARSEL = 1043,
+				TTM_SETTIPBKCOLOR = 1043,
+				RB_GETBKCOLOR = 1044,
+				SB_GETICON = 1044,
+				TB_ADDBUTTONSA = 1044,
+				TBM_SETTICFREQ = 1044,
+				TTM_SETTIPTEXTCOLOR = 1044,
+				RB_SETTEXTCOLOR = 1045,
+				TB_INSERTBUTTONA = 1045,
+				TBM_SETPAGESIZE = 1045,
+				TTM_GETDELAYTIME = 1045,
+				RB_GETTEXTCOLOR = 1046,
+				TB_DELETEBUTTON = 1046,
+				TBM_GETPAGESIZE = 1046,
+				TTM_GETTIPBKCOLOR = 1046,
+				RB_SIZETORECT = 1047,
+				TB_GETBUTTON = 1047,
+				TBM_SETLINESIZE = 1047,
+				TTM_GETTIPTEXTCOLOR = 1047,
+				RB_BEGINDRAG = 1048,
+				TB_BUTTONCOUNT = 1048,
+				TBM_GETLINESIZE = 1048,
+				TTM_SETMAXTIPWIDTH = 1048,
+				RB_ENDDRAG = 1049,
+				TB_COMMANDTOINDEX = 1049,
+				TBM_GETTHUMBRECT = 1049,
+				TTM_GETMAXTIPWIDTH = 1049,
+				RB_DRAGMOVE = 1050,
+				TBM_GETCHANNELRECT = 1050,
+				TB_SAVERESTOREA = 1050,
+				TTM_SETMARGIN = 1050,
+				RB_GETBARHEIGHT = 1051,
+				TB_CUSTOMIZE = 1051,
+				TBM_SETTHUMBLENGTH = 1051,
+				TTM_GETMARGIN = 1051,
+				RB_GETBANDINFOW = 1052,
+				TB_ADDSTRINGA = 1052,
+				TBM_GETTHUMBLENGTH = 1052,
+				TTM_POP = 1052,
+				RB_GETBANDINFOA = 1053,
+				TB_GETITEMRECT = 1053,
+				TBM_SETTOOLTIPS = 1053,
+				TTM_UPDATE = 1053,
+				RB_MINIMIZEBAND = 1054,
+				TB_BUTTONSTRUCTSIZE = 1054,
+				TBM_GETTOOLTIPS = 1054,
+				TTM_GETBUBBLESIZE = 1054,
+				RB_MAXIMIZEBAND = 1055,
+				TBM_SETTIPSIDE = 1055,
+				TB_SETBUTTONSIZE = 1055,
+				TTM_ADJUSTRECT = 1055,
+				TBM_SETBUDDY = 1056,
+				TB_SETBITMAPSIZE = 1056,
+				TTM_SETTITLEA = 1056,
+				MSG_FTS_JUMP_VA = 1057,
+				TB_AUTOSIZE = 1057,
+				TBM_GETBUDDY = 1057,
+				TTM_SETTITLEW = 1057,
+				RB_GETBANDBORDERS = 1058,
+				MSG_FTS_JUMP_QWORD = 1059,
+				RB_SHOWBAND = 1059,
+				TB_GETTOOLTIPS = 1059,
+				MSG_REINDEX_REQUEST = 1060,
+				TB_SETTOOLTIPS = 1060,
+				MSG_FTS_WHERE_IS_IT = 1061,
+				RB_SETPALETTE = 1061,
+				TB_SETPARENT = 1061,
+				RB_GETPALETTE = 1062,
+				RB_MOVEBAND = 1063,
+				TB_SETROWS = 1063,
+				TB_GETROWS = 1064,
+				TB_GETBITMAPFLAGS = 1065,
+				TB_SETCMDID = 1066,
+				RB_PUSHCHEVRON = 1067,
+				TB_CHANGEBITMAP = 1067,
+				TB_GETBITMAP = 1068,
+				MSG_GET_DEFFONT = 1069,
+				TB_GETBUTTONTEXTA = 1069,
+				TB_REPLACEBITMAP = 1070,
+				TB_SETINDENT = 1071,
+				TB_SETIMAGELIST = 1072,
+				TB_GETIMAGELIST = 1073,
+				TB_LOADIMAGES = 1074,
+				TTM_ADDTOOLW = 1074,
+				TB_GETRECT = 1075,
+				TTM_DELTOOLW = 1075,
+				TB_SETHOTIMAGELIST = 1076,
+				TTM_NEWTOOLRECTW = 1076,
+				TB_GETHOTIMAGELIST = 1077,
+				TTM_GETTOOLINFOW = 1077,
+				TB_SETDISABLEDIMAGELIST = 1078,
+				TTM_SETTOOLINFOW = 1078,
+				TB_GETDISABLEDIMAGELIST = 1079,
+				TTM_HITTESTW = 1079,
+				TB_SETSTYLE = 1080,
+				TTM_GETTEXTW = 1080,
+				TB_GETSTYLE = 1081,
+				TTM_UPDATETIPTEXTW = 1081,
+				TB_GETBUTTONSIZE = 1082,
+				TTM_ENUMTOOLSW = 1082,
+				TB_SETBUTTONWIDTH = 1083,
+				TTM_GETCURRENTTOOLW = 1083,
+
+				EM_GETEVENTMASK = (WM_USER + 59),
+
+				TB_SETMAXTEXTROWS = 1084,
+				TB_GETTEXTROWS = 1085,
+				TB_GETOBJECT = 1086,
+				TB_GETBUTTONINFOW = 1087,
+				TB_SETBUTTONINFOW = 1088,
+				TB_GETBUTTONINFOA = 1089,
+				TB_SETBUTTONINFOA = 1090,
+				TB_INSERTBUTTONW = 1091,
+				TB_ADDBUTTONSW = 1092,
+				TB_HITTEST = 1093,
+
+				EM_SETEVENTMASK = (WM_USER + 69),
+
+				TB_SETDRAWTEXTFLAGS = 1094,
+				TB_GETHOTITEM = 1095,
+				TB_SETHOTITEM = 1096,
+				TB_SETANCHORHIGHLIGHT = 1097,
+				TB_GETANCHORHIGHLIGHT = 1098,
+				TB_GETBUTTONTEXTW = 1099,
+				TB_SAVERESTOREW = 1100,
+				TB_ADDSTRINGW = 1101,
+				TB_MAPACCELERATORA = 1102,
+				TB_GETINSERTMARK = 1103,
+				TB_SETINSERTMARK = 1104,
+				TB_INSERTMARKHITTEST = 1105,
+				TB_MOVEBUTTON = 1106,
+				TB_GETMAXSIZE = 1107,
+				TB_SETEXTENDEDSTYLE = 1108,
+				TB_GETEXTENDEDSTYLE = 1109,
+				TB_GETPADDING = 1110,
+				TB_SETPADDING = 1111,
+				TB_SETINSERTMARKCOLOR = 1112,
+				TB_GETINSERTMARKCOLOR = 1113,
+				TB_MAPACCELERATORW = 1114,
+				TB_GETSTRINGW = 1115,
+				TB_GETSTRINGA = 1116,
+				TAPI_REPLY = 1123,
+				ACM_OPENA = 1124,
+				BFFM_SETSTATUSTEXTA = 1124,
+				CDM_FIRST = 1124,
+				CDM_GETSPEC = 1124,
+				IPM_CLEARADDRESS = 1124,
+				WM_CAP_UNICODE_START = 1124,
+				ACM_PLAY = 1125,
+				BFFM_ENABLEOK = 1125,
+				CDM_GETFILEPATH = 1125,
+				IPM_SETADDRESS = 1125,
+				PSM_SETCURSEL = 1125,
+				UDM_SETRANGE = 1125,
+				WM_CHOOSEFONT_SETLOGFONT = 1125,
+				ACM_STOP = 1126,
+				BFFM_SETSELECTIONA = 1126,
+				CDM_GETFOLDERPATH = 1126,
+				IPM_GETADDRESS = 1126,
+				PSM_REMOVEPAGE = 1126,
+				UDM_GETRANGE = 1126,
+				WM_CAP_SET_CALLBACK_ERRORW = 1126,
+				WM_CHOOSEFONT_SETFLAGS = 1126,
+				ACM_OPENW = 1127,
+				BFFM_SETSELECTIONW = 1127,
+				CDM_GETFOLDERIDLIST = 1127,
+				IPM_SETRANGE = 1127,
+				PSM_ADDPAGE = 1127,
+				UDM_SETPOS = 1127,
+				WM_CAP_SET_CALLBACK_STATUSW = 1127,
+				BFFM_SETSTATUSTEXTW = 1128,
+				CDM_SETCONTROLTEXT = 1128,
+				IPM_SETFOCUS = 1128,
+				PSM_CHANGED = 1128,
+				UDM_GETPOS = 1128,
+				CDM_HIDECONTROL = 1129,
+				IPM_ISBLANK = 1129,
+				PSM_RESTARTWINDOWS = 1129,
+				UDM_SETBUDDY = 1129,
+				CDM_SETDEFEXT = 1130,
+				PSM_REBOOTSYSTEM = 1130,
+				UDM_GETBUDDY = 1130,
+				PSM_CANCELTOCLOSE = 1131,
+				UDM_SETACCEL = 1131,
+				EM_CONVPOSITION = 1132,
+				PSM_QUERYSIBLINGS = 1132,
+				UDM_GETACCEL = 1132,
+				MCIWNDM_GETZOOM = 1133,
+				PSM_UNCHANGED = 1133,
+				UDM_SETBASE = 1133,
+				PSM_APPLY = 1134,
+				UDM_GETBASE = 1134,
+				PSM_SETTITLEA = 1135,
+				UDM_SETRANGE32 = 1135,
+				PSM_SETWIZBUTTONS = 1136,
+				UDM_GETRANGE32 = 1136,
+				WM_CAP_DRIVER_GET_NAMEW = 1136,
+				PSM_PRESSBUTTON = 1137,
+				UDM_SETPOS32 = 1137,
+				WM_CAP_DRIVER_GET_VERSIONW = 1137,
+				PSM_SETCURSELID = 1138,
+				UDM_GETPOS32 = 1138,
+				PSM_SETFINISHTEXTA = 1139,
+				PSM_GETTABCONTROL = 1140,
+				PSM_ISDIALOGMESSAGE = 1141,
+				MCIWNDM_REALIZE = 1142,
+				PSM_GETCURRENTPAGEHWND = 1142,
+				MCIWNDM_SETTIMEFORMATA = 1143,
+				PSM_INSERTPAGE = 1143,
+				MCIWNDM_GETTIMEFORMATA = 1144,
+				PSM_SETTITLEW = 1144,
+				WM_CAP_FILE_SET_CAPTURE_FILEW = 1144,
+				MCIWNDM_VALIDATEMEDIA = 1145,
+				PSM_SETFINISHTEXTW = 1145,
+				WM_CAP_FILE_GET_CAPTURE_FILEW = 1145,
+				MCIWNDM_PLAYTO = 1147,
+				WM_CAP_FILE_SAVEASW = 1147,
+				MCIWNDM_GETFILENAMEA = 1148,
+				MCIWNDM_GETDEVICEA = 1149,
+				PSM_SETHEADERTITLEA = 1149,
+				WM_CAP_FILE_SAVEDIBW = 1149,
+				MCIWNDM_GETPALETTE = 1150,
+				PSM_SETHEADERTITLEW = 1150,
+				MCIWNDM_SETPALETTE = 1151,
+				PSM_SETHEADERSUBTITLEA = 1151,
+				MCIWNDM_GETERRORA = 1152,
+				PSM_SETHEADERSUBTITLEW = 1152,
+				PSM_HWNDTOINDEX = 1153,
+				PSM_INDEXTOHWND = 1154,
+				MCIWNDM_SETINACTIVETIMER = 1155,
+				PSM_PAGETOINDEX = 1155,
+				PSM_INDEXTOPAGE = 1156,
+				DL_BEGINDRAG = 1157,
+				MCIWNDM_GETINACTIVETIMER = 1157,
+				PSM_IDTOINDEX = 1157,
+				DL_DRAGGING = 1158,
+				PSM_INDEXTOID = 1158,
+				DL_DROPPED = 1159,
+				PSM_GETRESULT = 1159,
+				DL_CANCELDRAG = 1160,
+				PSM_RECALCPAGESIZES = 1160,
+				MCIWNDM_GET_SOURCE = 1164,
+				MCIWNDM_PUT_SOURCE = 1165,
+				MCIWNDM_GET_DEST = 1166,
+				MCIWNDM_PUT_DEST = 1167,
+				MCIWNDM_CAN_PLAY = 1168,
+				MCIWNDM_CAN_WINDOW = 1169,
+				MCIWNDM_CAN_RECORD = 1170,
+				MCIWNDM_CAN_SAVE = 1171,
+				MCIWNDM_CAN_EJECT = 1172,
+				MCIWNDM_CAN_CONFIG = 1173,
+				IE_GETINK = 1174,
+				IE_MSGFIRST = 1174,
+				MCIWNDM_PALETTEKICK = 1174,
+				IE_SETINK = 1175,
+				IE_GETPENTIP = 1176,
+				IE_SETPENTIP = 1177,
+				IE_GETERASERTIP = 1178,
+				IE_SETERASERTIP = 1179,
+				IE_GETBKGND = 1180,
+				IE_SETBKGND = 1181,
+				IE_GETGRIDORIGIN = 1182,
+				IE_SETGRIDORIGIN = 1183,
+				IE_GETGRIDPEN = 1184,
+				IE_SETGRIDPEN = 1185,
+				IE_GETGRIDSIZE = 1186,
+				IE_SETGRIDSIZE = 1187,
+				IE_GETMODE = 1188,
+				IE_SETMODE = 1189,
+				IE_GETINKRECT = 1190,
+				WM_CAP_SET_MCI_DEVICEW = 1190,
+				WM_CAP_GET_MCI_DEVICEW = 1191,
+				WM_CAP_PAL_OPENW = 1204,
+				WM_CAP_PAL_SAVEW = 1205,
+				IE_GETAPPDATA = 1208,
+				IE_SETAPPDATA = 1209,
+				IE_GETDRAWOPTS = 1210,
+				IE_SETDRAWOPTS = 1211,
+				IE_GETFORMAT = 1212,
+				IE_SETFORMAT = 1213,
+				IE_GETINKINPUT = 1214,
+				IE_SETINKINPUT = 1215,
+				IE_GETNOTIFY = 1216,
+				IE_SETNOTIFY = 1217,
+				IE_GETRECOG = 1218,
+				IE_SETRECOG = 1219,
+				IE_GETSECURITY = 1220,
+				IE_SETSECURITY = 1221,
+				IE_GETSEL = 1222,
+				IE_SETSEL = 1223,
+				CDM_LAST = 1224,
+				IE_DOCOMMAND = 1224,
+				MCIWNDM_NOTIFYMODE = 1224,
+				IE_GETCOMMAND = 1225,
+				IE_GETCOUNT = 1226,
+				IE_GETGESTURE = 1227,
+				MCIWNDM_NOTIFYMEDIA = 1227,
+				IE_GETMENU = 1228,
+				IE_GETPAINTDC = 1229,
+				MCIWNDM_NOTIFYERROR = 1229,
+				IE_GETPDEVENT = 1230,
+				IE_GETSELCOUNT = 1231,
+				IE_GETSELITEMS = 1232,
+				IE_GETSTYLE = 1233,
+				MCIWNDM_SETTIMEFORMATW = 1243,
+				EM_OUTLINE = 1244,
+				MCIWNDM_GETTIMEFORMATW = 1244,
+				EM_GETSCROLLPOS = 1245,
+				EM_SETSCROLLPOS = 1246,
+				EM_SETFONTSIZE = 1247,
+				MCIWNDM_GETFILENAMEW = 1248,
+				MCIWNDM_GETDEVICEW = 1249,
+				MCIWNDM_GETERRORW = 1252,
+				FM_GETFOCUS = 1536,
+				FM_GETDRIVEINFOA = 1537,
+				FM_GETSELCOUNT = 1538,
+				FM_GETSELCOUNTLFN = 1539,
+				FM_GETFILESELA = 1540,
+				FM_GETFILESELLFNA = 1541,
+				FM_REFRESH_WINDOWS = 1542,
+				FM_RELOAD_EXTENSIONS = 1543,
+				FM_GETDRIVEINFOW = 1553,
+				FM_GETFILESELW = 1556,
+				FM_GETFILESELLFNW = 1557,
+				WLX_WM_SAS = 1625,
+				SM_GETSELCOUNT = 2024,
+				UM_GETSELCOUNT = 2024,
+				WM_CPL_LAUNCH = 2024,
+				SM_GETSERVERSELA = 2025,
+				UM_GETUSERSELA = 2025,
+				WM_CPL_LAUNCHED = 2025,
+				SM_GETSERVERSELW = 2026,
+				UM_GETUSERSELW = 2026,
+				SM_GETCURFOCUSA = 2027,
+				UM_GETGROUPSELA = 2027,
+				SM_GETCURFOCUSW = 2028,
+				UM_GETGROUPSELW = 2028,
+				SM_GETOPTIONS = 2029,
+				UM_GETCURFOCUSA = 2029,
+				UM_GETCURFOCUSW = 2030,
+				UM_GETOPTIONS = 2031,
+				UM_GETOPTIONS2 = 2032,
+				//OCM__BASE = 8192 , 
+				WM_REFLECT = 0x2000,
+				OCM_CTLCOLOR = 8217,
+				OCM_DRAWITEM = (WM_REFLECT + WM_DRAWITEM), //0x202B=8235'called once when the ListView Is created, but only in Details view,
+				OCM_MEASUREITEM = (WM_REFLECT + WM_MEASUREITEM), //'0x202C=8236  , 
+
+
+				OCM_DELETEITEM = 8237,
+				OCM_VKEYTOITEM = 8238,
+				OCM_CHARTOITEM = 8239,
+				OCM_COMPAREITEM = 8249,
+				OCM_NOTIFY = (WM_REFLECT + WM_NOTIFY),
+				OCM_COMMAND = 8465,
+				OCM_HSCROLL = 8468,
+				OCM_VSCROLL = 8469,
+				OCM_CTLCOLORMSGBOX = 8498,
+				OCM_CTLCOLOREDIT = 8499,
+				OCM_CTLCOLORLISTBOX = 8500,
+				OCM_CTLCOLORBTN = 8501,
+				OCM_CTLCOLORDLG = 8502,
+				OCM_CTLCOLORSCROLLBAR = 8503,
+				OCM_CTLCOLORSTATIC = 8504,
+				OCM_PARENTNOTIFY = 8720,
+				WM_APP = 32768,
+				WM_RASDIALEVENT = 52429
+
 			}
+
+
+			[DllImport(core.WINDLL_USER, SetLastError = true, CharSet = CharSet.Auto, CallingConvention = CallingConvention.Winapi)]
+			internal static extern IntPtr SendMessage(
+			[In] IntPtr hwnd,
+			[In, MarshalAs(UnmanagedType.I4)] WindowMessages wMsg,
+			[In] IntPtr wParam,
+			[In] IntPtr lParam);
+
+
+			[DllImport(core.WINDLL_USER, SetLastError = true, CharSet = CharSet.Auto, CallingConvention = CallingConvention.Winapi)]
+			internal static extern IntPtr SendMessage(
+				[In] IntPtr hwnd,
+				[In, MarshalAs(UnmanagedType.I4)] WindowMessages wMsg,
+				[In] int wParam,
+				[In, MarshalAs(UnmanagedType.LPTStr)] string? lParam);
+
+
+			[DllImport(core.WINDLL_USER, SetLastError = true, CharSet = CharSet.Auto, CallingConvention = CallingConvention.Winapi)]
+			internal static extern IntPtr SendMessage(
+				[In] IntPtr hwnd,
+				[In, MarshalAs(UnmanagedType.I4)] int wMsg,
+				[In] int wParam,
+				[In, MarshalAs(UnmanagedType.LPTStr)] string? lParam);
+
+
+			[DllImport(core.WINDLL_USER, SetLastError = true, CharSet = CharSet.Auto, CallingConvention = CallingConvention.Winapi)]
+			internal static extern int SendMessage(
+			  [In] IntPtr hwnd,
+			  [In, MarshalAs(UnmanagedType.I4)] int wMsg,
+			  [In, MarshalAs(UnmanagedType.I4)] int wParam,
+			  [In, MarshalAs(UnmanagedType.I4)] int lParam);
+
+
+			#endregion
+
+
+
+			#region AppCommand
+
 
 			/// <summary>
 			/// This commands mostly used by remote control apps for send commands from remote control to the system. Like Media players with remote or like the MediaCenter etc.
@@ -30296,37 +31575,7 @@ namespace uom
 			}
 
 
-			[DllImport(core.WINDLL_USER, SetLastError = true, CharSet = CharSet.Auto, CallingConvention = CallingConvention.Winapi)]
-			internal static extern IntPtr SendMessage(
-			[In] IntPtr hwnd,
-			[In, MarshalAs(UnmanagedType.I4)] WindowMessages wMsg,
-			[In] IntPtr wParam,
-			[In] IntPtr lParam);
-
-
-			[DllImport(core.WINDLL_USER, SetLastError = true, CharSet = CharSet.Auto, CallingConvention = CallingConvention.Winapi)]
-			internal static extern IntPtr SendMessage(
-				[In] IntPtr hwnd,
-				[In, MarshalAs(UnmanagedType.I4)] WindowMessages wMsg,
-				[In] int wParam,
-				[In, MarshalAs(UnmanagedType.LPTStr)] string? lParam);
-
-
-			[DllImport(core.WINDLL_USER, SetLastError = true, CharSet = CharSet.Auto, CallingConvention = CallingConvention.Winapi)]
-			internal static extern int SendMessage(
-			  [In] IntPtr hwnd,
-			  [In, MarshalAs(UnmanagedType.I4)] int wMsg,
-			  [In, MarshalAs(UnmanagedType.I4)] int wParam,
-			  [In, MarshalAs(UnmanagedType.I4)] int lParam);
-
-
-			[DllImport(core.WINDLL_USER, SetLastError = true, CharSet = CharSet.Auto, CallingConvention = CallingConvention.Winapi)]
-			internal static extern IntPtr GetDesktopWindow();
-
-
-			/// <summary>
-			/// Send to the system an "app command", it is like pressing volume up / down / mute button or other like this.
-			/// </summary>
+			/// <summary>Send to the system an "app command", it is like pressing volume up / down / mute button or other like this.</summary>
 			public static void SendAppCommand(
 				IntPtr hwnd,
 				FAPPCOMMAND_CMD cmd,
@@ -30340,6 +31589,12 @@ namespace uom
 			}
 
 
+			#endregion
+
+
+			[DllImport(core.WINDLL_USER, SetLastError = true, CharSet = CharSet.Auto, CallingConvention = CallingConvention.Winapi)]
+			internal static extern IntPtr GetDesktopWindow();
+
 
 			[DllImport(core.WINDLL_USER)]
 			private static extern int GetClientRect(
@@ -30352,6 +31607,19 @@ namespace uom
 				_ = GetClientRect(wind.Handle, ref rcClient);
 				return rcClient;
 			}
+
+
+			public enum TextBoxMessages : int
+			{
+				//WM_PAINT = 0xF,
+				EM_SETCUEBANNER = 0x1501
+			}
+
+			/*
+
+
+
+	*/
 
 		}
 
@@ -30390,6 +31658,11 @@ namespace uom
 
 				public Graphics CreateGraphics() => Graphics.FromHdc(DangerousGetHandle());
 			}
+
+
+
+
+
 
 
 		}

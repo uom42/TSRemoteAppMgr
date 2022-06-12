@@ -109,7 +109,7 @@ namespace TSRemoteAppMgr
 
 		private void OnRow_Add()
 		{
-			this.tryOnWaitCursor(() =>
+			this.e_tryOnWaitCursor(() =>
 			{
 				_ral!.CheckRemoteServerValid();
 
@@ -126,10 +126,10 @@ namespace TSRemoteAppMgr
 
 		private void OnRow_Edit()
 		{
-			RemoteAppListViewItem[] selApps = lvwAppList.SelectedItemsAs<RemoteAppListViewItem>().ToArray();
+			RemoteAppListViewItem[] selApps = lvwAppList.e_SelectedItemsAs<RemoteAppListViewItem>().ToArray();
 			if (selApps.Length != 1) return;
 
-			this.tryOnWaitCursor(() =>
+			this.e_tryOnWaitCursor(() =>
 			{
 				_ral!.CheckRemoteServerValid();
 
@@ -148,11 +148,11 @@ namespace TSRemoteAppMgr
 
 		private void btnApp_Copy_Click(object sender, EventArgs e)
 		{
-			this.tryOnWaitCursor(() =>
+			this.e_tryOnWaitCursor(() =>
 			{
 				_ral!.CheckRemoteServerValid();
 
-				RemoteAppListViewItem[] selApps = lvwAppList.SelectedItemsAs<RemoteAppListViewItem>().ToArray();
+				RemoteAppListViewItem[] selApps = lvwAppList.e_SelectedItemsAs<RemoteAppListViewItem>().ToArray();
 				if (selApps.Length != 1) return;
 
 				RemoteApp app = selApps.First().Application;
@@ -170,7 +170,7 @@ namespace TSRemoteAppMgr
 
 		private void OnRow_Delete()
 		{
-			this.tryOnWaitCursor(() =>
+			this.e_tryOnWaitCursor(() =>
 			{
 				_ral!.CheckRemoteServerValid();
 
@@ -198,7 +198,7 @@ namespace TSRemoteAppMgr
 				}
 				finally
 				{
-					lvwAppList.AutoSizeColumns();
+					lvwAppList.e_AutoSizeColumns();
 					OnRow_Selected();
 				}
 			});
@@ -206,7 +206,7 @@ namespace TSRemoteAppMgr
 
 		private void btnApp_Refresh_Click(object sender, EventArgs e)
 		{
-			this.tryOnWaitCursor(() =>
+			this.e_tryOnWaitCursor(() =>
 			{
 				_ral!.CheckRemoteServerValid();
 				FillList();
@@ -215,7 +215,7 @@ namespace TSRemoteAppMgr
 
 		private void btnServerSettings_Click(object sender, EventArgs e)
 		{
-			this.tryOnWaitCursor(() =>
+			this.e_tryOnWaitCursor(() =>
 			{
 				ServerSettings ss = _ral!.LoadServerSettings();
 				try
@@ -236,7 +236,7 @@ namespace TSRemoteAppMgr
 		{
 			if (_ral!.IsRemote) return;
 
-			this.tryOnWaitCursor(() =>
+			this.e_tryOnWaitCursor(() =>
 			{
 				_ral!.CheckRemoteServerValid();
 

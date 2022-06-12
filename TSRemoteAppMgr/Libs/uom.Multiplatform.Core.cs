@@ -1385,14 +1385,14 @@ namespace uom
 		{
 			OnBeforeDispose(true);
 			DisposeList(ManagedObjectsToDispose);
-			ExecDisposeActions(ManagedDisposeCallBacks);
+			RunDisposeActions(ManagedDisposeCallBacks);
 		}
 
 		protected virtual void FreeUnmanagedObjects()
 		{
 			OnBeforeDispose(false);
 			DisposeList(UnManagedObjectsToDispose);
-			ExecDisposeActions(UnManagedDisposeCallBacks);
+			RunDisposeActions(UnManagedDisposeCallBacks);
 		}
 
 		/// <summary>Just template, override if need</summary>            
@@ -1407,7 +1407,7 @@ namespace uom
 			}
 		}
 
-		private static void ExecDisposeActions(Stack<Action> rList)
+		private static void RunDisposeActions(Stack<Action> rList)
 		{
 			while (rList.Any())
 			{
@@ -1538,18 +1538,38 @@ namespace uom
 			Value = InitialValue;
 		}
 
+		protected void RunInSafeLock(Action a, bool write)
+		{
+			if (write)
+				MTSyncObject?.EnterWriteLock();
+			else
+				MTSyncObject?.EnterReadLock();
+
+			try
+			{
+				a.Invoke();
+			}
+			finally
+			{
+				if (write)
+					MTSyncObject?.ExitWriteLock();
+				else
+					MTSyncObject?.ExitReadLock();
+			}
+		}
+
 		/// <summary>Многопоточнобезопасное получение и установка значения</summary>
 		public override T? Value
 		{
 			get
 			{
-				MTSyncObject?.EnterReadLock();
-				try { return UnsafeValue; } finally { MTSyncObject?.ExitReadLock(); }
+				T? v = default(T?);
+				RunInSafeLock(() => { v = UnsafeValue; }, false);
+				return v;
 			}
 			set
 			{
-				MTSyncObject?.EnterWriteLock();
-				try { UnsafeValue = value; } finally { MTSyncObject?.ExitWriteLock(); } // End SyncLock
+				RunInSafeLock(() => { UnsafeValue = value; }, true);
 			}
 		}
 
@@ -1580,8 +1600,12 @@ namespace uom
 	{
 		public MTSafeCounterInt32(int iDefaultValue = 0) : base(iDefaultValue) { }
 
-		public void Increment(int iStep = 1) => Value += iStep;
-		public void Decrement(int iStep = 1) => Value -= iStep;
+		public void Increment(int iStep = 1)
+			=> RunInSafeLock(() => { UnsafeValue += iStep; }, true);
+
+		public void Decrement(int iStep = 1)
+			=> RunInSafeLock(() => { UnsafeValue -= iStep; }, true);
+
 		public void Reset() => Value = 0;
 
 		public static implicit operator int(MTSafeCounterInt32 I) => I.Value;
@@ -1664,7 +1688,7 @@ namespace uom
 			[ThreadStatic]
 			private static bool _currentThreadIsProcessingItems;
 
-			/// <summary>The list of tasks to be executed</summary>
+			/// <summary>The list of tasks to be e_runuted</summary>
 			private readonly LinkedList<Task> _tasks = new(); // protected by lock(_tasks)
 
 			/// <summary>The maximum concurrency level allowed by this scheduler.</summary>
@@ -1696,7 +1720,7 @@ namespace uom
 				}
 			}
 
-			// Inform the ThreadPool that there's work to be executed for this scheduler.
+			// Inform the ThreadPool that there's work to be e_runuted for this scheduler.
 			private void NotifyThreadPoolOfPendingWork()
 			{
 				ThreadPool.UnsafeQueueUserWorkItem(_ =>
@@ -1724,7 +1748,7 @@ namespace uom
 								_tasks.RemoveFirst();
 							}
 
-							// Execute the task we pulled out of the queue
+							// e_runute the task we pulled out of the queue
 							base.TryExecuteTask(item);
 						}
 					}
@@ -1733,7 +1757,7 @@ namespace uom
 				}, null);
 			}
 
-			/// <summary>Attempts to execute the specified task on the current thread.</summary>
+			/// <summary>Attempts to e_runute the specified task on the current thread.</summary>
 			protected sealed override bool TryExecuteTaskInline(Task task, bool taskWasPreviouslyQueued)
 			{
 				// If this thread isn't already processing a task, we don't support inlining
@@ -3884,7 +3908,7 @@ namespace uom
 			/// <param name="source">Исходный текст для разделения</param>
 			/// <returns>Массив строк исходного текста</returns>
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
-			internal static IEnumerable<string> e_SplitToLines(this string? source, bool skipEmptyLines = false)
+			internal static IEnumerable<string> e_SplitToLines(this string? source, bool skipEmptyLines = false, bool trimEachLine = false)
 			{
 				if (source.e_IsNullOrEmpty()) yield break;
 
@@ -3893,6 +3917,8 @@ namespace uom
 				while (null != sLine)
 				{
 					bool bAdd = true;
+
+					if (trimEachLine) sLine = sLine.Trim();
 					if (skipEmptyLines) bAdd = sLine.e_IsNOTNullOrWhiteSpace();
 					if (bAdd) yield return sLine;
 					sLine = sr.ReadLine();
@@ -5711,6 +5737,17 @@ namespace uom
 		internal static partial class Extensions_IO
 		{
 
+			/// <summary>Just test file exist to throw error if not.</summary>
+			/// <exception cref="System.IO.FileNotFoundException"></exception>
+			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static void e_throwIfNotExist(this string path)
+			{
+				var fsi = path.e_ToFileSystemInfo();
+				if (!fsi!.Exists) throw new System.IO.FileNotFoundException(null, path);
+				//var atr = System.IO.File.GetAttributes(path);
+				//return !(atr.HasFlag(FileAttributes.Directory));
+			}
+
 			/// <summary>"Add \\?\ to start of string</summary>
 			[DebuggerNonUserCode, DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
 			public static string e_PathAddLongPathPrefix(this string sPath)
@@ -6451,7 +6488,7 @@ namespace uom
 		internal static partial class Extensions_Async_MT
 		{
 
-			public static void trycatch(
+			public static void e_RunTryCatch(
 				this Func<uint> operation,
 				string messageTemplate,
 				params object[] messageArgs)
@@ -6464,7 +6501,7 @@ namespace uom
 				}
 			}
 
-			public static void trycatch(
+			public static void e_RunTryCatch(
 				this Func<bool> operation,
 				string messageTemplate,
 				params object[] messageArgs)
@@ -6483,7 +6520,10 @@ namespace uom
 
 			[DebuggerNonUserCode, DebuggerStepThrough]
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			internal static async Task<T> e_RunAsync<T>(this Func<T> A, TaskCreationOptions TaskFlags = TaskCreationOptions.LongRunning)
+			internal static async Task<T>
+				e_RunAsync<T>(
+				this Func<T> A,
+				TaskCreationOptions TaskFlags = TaskCreationOptions.LongRunning)
 			{
 				using (var tskAsync = new Task<T>(() => A.Invoke(), TaskFlags))
 				{
@@ -6661,7 +6701,7 @@ namespace uom
 					{
 						// MsgBox("START WAIT... " & C_EVENT_NAME)
 						await runAsync(() => evtWait.WaitOne(Timeout.Infinite));
-						// Await ExecAsync(Function() SomeLongWorkingFunction)
+						// Await e_runAsync(Function() SomeLongWorkingFunction)
 
 						bContinueWait = OnEventCallback.Invoke();
 					}
@@ -6705,7 +6745,7 @@ namespace uom
 
 
 
-	#region ExecAsync Await Helpers
+	#region e_runAsync Await Helpers
 
 
 			/// <summary>Ожидаем сигнала через AWAIT</summary>
@@ -6764,13 +6804,13 @@ namespace uom
 
 			[DebuggerNonUserCode, DebuggerStepThrough]
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			internal async static Task<T> ExecAsync<T>(this Form F, Func<T> A, TaskCreationOptions TaskFlags = TaskCreationOptions.LongRunning, bool UseWaitCursor = true, bool CatchAndShowError = true)
+			internal async static Task<T> e_runAsync<T>(this Form F, Func<T> A, TaskCreationOptions TaskFlags = TaskCreationOptions.LongRunning, bool UseWaitCursor = true, bool CatchAndShowError = true)
 			{
 				try
 				{
 					if (F !=null && UseWaitCursor)
 						F.UseWaitCursor = true;
-					return await A.ExecAsync(TaskFlags);
+					return await A.e_runAsync(TaskFlags);
 				}
 				catch (Exception ex)
 				{
@@ -6789,7 +6829,7 @@ namespace uom
 
 			[DebuggerNonUserCode, DebuggerStepThrough]
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			internal async static Task ExecAsync(this Form F, Task A, bool UseWaitCursor = true, bool CatchAndShowError = true)
+			internal async static Task e_runAsync(this Form F, Task A, bool UseWaitCursor = true, bool CatchAndShowError = true)
 			{
 				try
 				{
@@ -6813,7 +6853,7 @@ namespace uom
 
 			[DebuggerNonUserCode, DebuggerStepThrough]
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			internal async static Task<T> ExecAsync<T>(this Form F, Task<T> A, TaskCreationOptions TaskFlags = TaskCreationOptions.LongRunning, bool UseWaitCursor = true, bool CatchAndShowError = true)
+			internal async static Task<T> e_runAsync<T>(this Form F, Task<T> A, TaskCreationOptions TaskFlags = TaskCreationOptions.LongRunning, bool UseWaitCursor = true, bool CatchAndShowError = true)
 			{
 				try
 				{
@@ -6838,14 +6878,14 @@ namespace uom
 
 			[DebuggerNonUserCode, DebuggerStepThrough]
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			internal async static Task ExecAsync(this Form F, Action A, TaskCreationOptions TaskFlags = TaskCreationOptions.LongRunning, bool UseWaitCursor = true, bool CatchAndShowError = true)
+			internal async static Task e_runAsync(this Form F, Action A, TaskCreationOptions TaskFlags = TaskCreationOptions.LongRunning, bool UseWaitCursor = true, bool CatchAndShowError = true)
 			{
 				bool fCallAction()
 				{
 					A.Invoke();
 					return true;
 				};
-				var bDummy = await F.ExecAsync(fCallAction, TaskFlags, UseWaitCursor, CatchAndShowError);
+				var bDummy = await F.e_runAsync(fCallAction, TaskFlags, UseWaitCursor, CatchAndShowError);
 				return;
 			}
 			*/
