@@ -14,8 +14,12 @@
 		<ApplicationVisualStyles>true</ApplicationVisualStyles>
 		<ApplicationUseCompatibleTextRendering>false</ApplicationUseCompatibleTextRendering>
 		<ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
-		<AssemblyVersion>1.0.1.0</AssemblyVersion>
-		<FileVersion>1.0.1.0</FileVersion>
+
+		<AssemblyVersion>1.0.2.0</AssemblyVersion>
+		<FileVersion>1.0.2.1</FileVersion>
+		<Copyright>(C) UOM 2022</Copyright>
+		<PackageProjectUrl>https://github.com/uom42/TSRemoteAppMgr</PackageProjectUrl>
+		<Version>1.0.2</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
