@@ -22,7 +22,7 @@ namespace TSRemoteAppMgr.RemoteApplication
 			Application = app;
 			_lvw = lvw;
 
-			this.AddFakeSubitems(_lvw.Columns.Count);
+			this.e_AddFakeSubitems(_lvw.Columns.Count);
 			Update();
 		}
 
@@ -32,7 +32,7 @@ namespace TSRemoteAppMgr.RemoteApplication
 			if (Application.CommandLineSetting == RemoteApp.CLS_FLAGS.DISABLED) sArgs = "Disabled";
 			if (Application.CommandLineSetting == RemoteApp.CLS_FLAGS.ALLOW_ANY) sArgs = string.Empty;
 
-			this.UpdateTexts(0,
+			this.e_UpdateTexts(0,
 				Application.Alias,
 				Application.DisplayName,
 				Application.AllowWebAccess ? "yes" : "no",
@@ -41,7 +41,7 @@ namespace TSRemoteAppMgr.RemoteApplication
 
 			//Groups...
 			string sGroupKey = Application.TSRemoteAppMgr_Group.IIF_IsNullOrWhiteSpace("Default");
-			this.Group = _lvw.GroupsCreateGroupByKey(sGroupKey.ToLower(), sGroupKey, ListViewGroupCollapsedState.Expanded).Group;
+			this.Group = _lvw.e_GroupsCreateGroupByKey(sGroupKey.ToLower(), sGroupKey, ListViewGroupCollapsedState.Expanded).Group;
 		}
 	}
 }

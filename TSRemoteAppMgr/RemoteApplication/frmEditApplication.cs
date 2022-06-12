@@ -262,7 +262,7 @@ namespace TSRemoteAppMgr.RemoteApplication
 		{
 			if (null == _app) return;
 
-			this.tryOnWaitCursor(() =>
+			this.e_tryOnWaitCursor(() =>
 			{
 				_appList!.CheckRemoteServerValid();
 

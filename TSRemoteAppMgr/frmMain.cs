@@ -70,7 +70,7 @@ namespace TSRemoteAppMgr
 					.Select(app => new RemoteAppListViewItem(app, lvwAppList))
 					.ToArray();
 
-				lvwAppList.ExecOnLockedUpdate(() => lvwAppList.Items.AddRange(appsRows), true);
+				lvwAppList.e_runOnLockedUpdate(() => lvwAppList.Items.AddRange(appsRows), true);
 			}
 			catch (Exception ex)
 			{
@@ -87,7 +87,7 @@ namespace TSRemoteAppMgr
 		{
 			RemoteAppListViewItem liApp = new(app, lvwAppList);
 			lvwAppList.Items.Add(liApp);
-			lvwAppList.AutoSizeColumns();
+			lvwAppList.e_AutoSizeColumns();
 
 			lvwAppList.SelectedItems.Clear();
 			liApp.Selected = true;
@@ -96,14 +96,14 @@ namespace TSRemoteAppMgr
 
 		private void OnRow_Selected()
 		{
-			RemoteAppListViewItem[] selApps = lvwAppList.SelectedItemsAs<RemoteAppListViewItem>().ToArray();
+			RemoteAppListViewItem[] selApps = lvwAppList.e_SelectedItemsAs<RemoteAppListViewItem>().ToArray();
 			btnApp_Copy.Enabled = (selApps.Length == 1);
 			btnApp_Edit.Enabled = (selApps.Length == 1);
 			btnApp_Delete.Enabled = (selApps.Length > 0);
 		}
 
 		private string[] GetGroups()
-			=> lvwAppList.GroupsAsIEnumerable().Select(g => g.Header).ToArray();
+			=> lvwAppList.e_GroupsAsIEnumerable().Select(g => g.Header).ToArray();
 
 
 
@@ -176,7 +176,7 @@ namespace TSRemoteAppMgr
 
 				try
 				{
-					RemoteAppListViewItem[] selApps = lvwAppList.SelectedItemsAs<RemoteAppListViewItem>().ToArray();
+					RemoteAppListViewItem[] selApps = lvwAppList.e_SelectedItemsAs<RemoteAppListViewItem>().ToArray();
 					if (!selApps.Any()) return;
 
 					string question = $"Delete '{selApps.Length}' Application(s)?";
